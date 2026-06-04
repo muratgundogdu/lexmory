@@ -142,6 +142,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               isDismissible: game.isOutOfTokensDismissible,
               currentTokens: game.tokens,
               lastRegen: game.lastRegenTime,
+              rewardAmount: game.pendingAdReward > 0 ? game.pendingAdReward : 50,
               onWatchAd: () => ref.read(gameProvider.notifier).watchAdForTokens(),
               onClose: () => ref.read(gameProvider.notifier).closeOutOfTokensPanel(),
               onStore: () {},

@@ -9,6 +9,7 @@ class OutOfTokensOverlay extends StatelessWidget {
   final bool isVisible;
   final int currentTokens;
   final DateTime lastRegen;
+  final int rewardAmount; // <--- BU SATIRI EKLEYİN
   final VoidCallback onWatchAd;
   final VoidCallback onStore;
   final bool isDismissible;
@@ -19,6 +20,7 @@ class OutOfTokensOverlay extends StatelessWidget {
     required this.isVisible,
     required this.currentTokens,
     required this.lastRegen,
+    required this.rewardAmount, // <--- BU SATIRI EKLEYİN
     required this.onWatchAd,
     required this.onStore,
     required this.isDismissible,
@@ -71,8 +73,8 @@ class OutOfTokensOverlay extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text(
-                      "Devam etmek için daha fazla tokena ihtiyacın var.",
+                    Text(
+                      "Reklam izleyerek anında $rewardAmount token kazanabilirsin!",
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white70),
                     ),
@@ -80,7 +82,7 @@ class OutOfTokensOverlay extends StatelessWidget {
 
                     _buildActionButton(
                       label: "REKLAM İZLE",
-                      subLabel: "+50 TOKEN",
+                      subLabel: "$rewardAmount TOKEN",
                       icon: Icons.play_circle_fill,
                       color: Colors.amber.shade700,
                       onTap: onWatchAd,

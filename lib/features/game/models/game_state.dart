@@ -77,6 +77,8 @@ class GameState {
   final int totalSolvedWords;
   final int totalEarnedTokens;
 
+  final int pendingAdReward; // Eklenen satır
+
   const GameState({
     required this.category,
     required this.targetWord,
@@ -111,6 +113,7 @@ class GameState {
     this.rewardTrigger = 0,
     this.lastReward,
     this.lastCompletedCategory,
+    this.pendingAdReward = 0, // Default 0
   });
 
   GameState copyWith({
@@ -147,6 +150,7 @@ class GameState {
     DateTime? lastRegenTime,
     bool? letterJustSettled,
     bool? tutorialLock, // copyWith'e eklendi
+    int? pendingAdReward,
   }) {
     return GameState(
       category: category ?? this.category,
@@ -182,6 +186,7 @@ class GameState {
       lastReward: lastReward ?? this.lastReward,
       letterJustSettled: letterJustSettled ?? this.letterJustSettled,
       tutorialLock: tutorialLock ?? this.tutorialLock, // Atama yapıldı
+      pendingAdReward: pendingAdReward ?? this.pendingAdReward,
     );
   }
 
@@ -219,6 +224,7 @@ class GameState {
       'letterJustSettled': letterJustSettled,
       'tutorialLock': tutorialLock, // JSON'a eklendi
       'lastReward': lastReward?.toJson(),
+      'pendingAdReward': pendingAdReward,
     };
   }
 
@@ -254,6 +260,7 @@ class GameState {
       tutorialLock: json['tutorialLock'] as bool? ?? false, // JSON'dan okuma eklendi
       lastRegenTime: DateTime.parse(json['lastRegenTime'] as String),
       lastReward: json['lastReward'] != null ? RewardData.fromJson(json['lastReward']) : null,
+      pendingAdReward: json['pendingAdReward'] ?? 0,
     );
   }
 }

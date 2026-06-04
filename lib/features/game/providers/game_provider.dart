@@ -80,9 +80,18 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   Future<void> watchAdForTokens() async {
-    final success = await _adService.showRewardedAd();
+    final bool success = await _adService.showRewardedAd();
+
     if (success) {
-      state = state.copyWith(tokens: state.tokens + 50, showOutOfTokensPanel: false);
+      // Eğer pasif bir durumda (joker tıklamadan) reklam izlendiyse
+      // veya miktar 0 ise default olarak 50 verelim.
+      int rewardAmount = state.pendingAdReward > 0 ? state.pendingAdReward : 50;
+
+      state = state.copyWith(
+        tokens: state.tokens + rewardAmount,
+        showOutOfTokensPanel: false,
+        pendingAdReward: 0, // Ödül alındı, sıfırla
+      );
       _persist();
     }
   }
@@ -494,7 +503,7 @@ class GameNotifier extends StateNotifier<GameState> {
     final int cost = isFree ? 0 : 80;
 
     if (state.tokens < cost) {
-      _showOutOfTokensForJoker();
+      _showOutOfTokensForJoker(cost); // cost burada 80'dir
       return;
     }
 
@@ -572,7 +581,7 @@ class GameNotifier extends StateNotifier<GameState> {
     final int cost = isFree ? 0 : 60;
 
     if (state.tokens < cost) {
-      _showOutOfTokensForJoker();
+      _showOutOfTokensForJoker(cost); // cost burada 60'tır
       return;
     }
 
@@ -631,7 +640,7 @@ class GameNotifier extends StateNotifier<GameState> {
     final int cost = isFree ? 0 : 40;
 
     if (state.tokens < cost) {
-      _showOutOfTokensForJoker();
+      _showOutOfTokensForJoker(cost); // cost burada 40'tır
       return;
     }
 
@@ -670,8 +679,12 @@ class GameNotifier extends StateNotifier<GameState> {
     }
   }
 
-  void _showOutOfTokensForJoker() {
-    state = state.copyWith(showOutOfTokensPanel: true, isOutOfTokensDismissible: true);
+  void _showOutOfTokensForJoker(int amount) {
+    state = state.copyWith(
+      showOutOfTokensPanel: true,
+      isOutOfTokensDismissible: true,
+      pendingAdReward: amount, // Hangi joker için açıldıysa o miktarı kaydet
+    );
     _persist();
   }
 
