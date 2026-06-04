@@ -114,9 +114,6 @@ class TutorialController extends StateNotifier<TutorialState> {
   }
 
   void showJokerOnboarding() {
-    print("SHOW JOKER ONBOARDING");
-    print("currentStep=${state.currentStep}");
-    print("isTutorialActive=${state.isTutorialActive}");
     showHintClearOnboarding();
   }
 
@@ -156,10 +153,10 @@ class TutorialController extends StateNotifier<TutorialState> {
 
   Future<void> startJokerOnboarding() async {
     if (state.currentStep == TutorialStep.forcedHint ||
-        state.currentStep == TutorialStep.forcedClear) return;
+        state.currentStep == TutorialStep.forcedClear) {return;}
 
     if (state.hintJokerTutorialCompleted &&
-        state.removeJokerTutorialCompleted) return;
+        state.removeJokerTutorialCompleted) {return;}
 
     state = state.copyWith(
       isTutorialActive: true,

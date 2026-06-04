@@ -20,85 +20,74 @@ class JokerBar extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {    final notifier = ref.read(gameProvider.notifier);
-  final tutorial = ref.watch(tutorialProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(gameProvider.notifier);
+    final tutorial = ref.watch(tutorialProvider);
 
-  final step = tutorial.currentStep;
-  final bool isTutorialActive = tutorial.isTutorialActive;
+    final step = tutorial.currentStep;
+    final bool isTutorialActive = tutorial.isTutorialActive;
 
-  // 1. Ana tutorial (Phase 1 ve 2 - ELMA bölümü) kontrolü
-  final bool isPhase1or2 = isTutorialActive &&
-      (tutorial.phase == TutorialPhase.phase1 || tutorial.phase == TutorialPhase.phase2);
+    // 1. Tıklama İzinlerini Hesaplayalım
+    // Eğer tutorial aktifse; sadece o anki adıma ait butona izin ver.
+    // Eğer tutorial aktif değilse (normal oyun); buton her zaman aktiftir.
 
-  // 2. Tıklama İzinlerini Tanımlayalım
-  // Eğer tutorial aktifse; sadece o anki adıma ait butona izin ver.
-  // Eğer tutorial aktif değilse (normal oyun); Phase 1 veya 2'de değilsek izin ver.
+    final bool canUseHint = isTutorialActive
+        ? (step == TutorialStep.forcedHint)
+        : true;
 
-  final bool canUseHint = isTutorialActive
-      ? (step == TutorialStep.forcedHint)
-      : !isPhase1or2;
+    final bool canUseClear = isTutorialActive
+        ? (step == TutorialStep.forcedClear)
+        : true;
 
-  final bool canUseClear = isTutorialActive
-      ? (step == TutorialStep.forcedClear)
-      : !isPhase1or2;
+    // Tekrar butonu özel kural: Ezberleme modunda (isInitialReveal) kullanılamaz.
+    final bool canUseReveal = isTutorialActive
+        ? (step == TutorialStep.forcedReveal)
+        : (game.hasStarted && !game.isInitialReveal);
 
-  final bool canUseReveal = isTutorialActive
-      ? (step == TutorialStep.forcedReveal) // Eğer tutorial aktifse sadece forcedReveal adımında izin ver
-      : (!isPhase1or2 && game.hasStarted && !game.isInitialReveal);
-
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(24),
-    ),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _JokerButton(
-          key: hintKey,
-          icon: Icons.lightbulb_outline,
-          label: "Harf Aç",
-          cost: 80,
-          // canUseHint değişkenini burada kullanıyoruz
-          onTap: (tutorial.isTutorialActive)
-              ? (tutorial.currentStep == TutorialStep.forcedHint ? () => notifier.useHint() : null)
-              : () => notifier.useHint(),
-        ),
-        _JokerButton(
-          key: clearKey,
-          icon: Icons.auto_fix_high,
-          label: "Yanlış Sil",
-          cost: 60,
-          // canUseClear değişkenini burada kullanıyoruz
-          onTap: (tutorial.isTutorialActive)
-              ? (tutorial.currentStep == TutorialStep.forcedClear ? () => notifier.clearWrong() : null)
-              : () => notifier.clearWrong(),
-        ),
-        _JokerButton(
-          key: revealKey,
-          icon: Icons.visibility_outlined,
-          label: "Tekrar",
-          cost: 40,
-          // canUseReveal değişkenini burada kullanıyoruz
-          onTap: canUseReveal ? () => notifier.showAgain() : null,
-        ),
-      ],
-    ),
-  );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _JokerButton(
+            key: hintKey,
+            icon: Icons.lightbulb_outline,
+            label: "Harf Aç",
+            cost: 80,
+            onTap: canUseHint ? () => notifier.useHint() : null,
+          ),
+          _JokerButton(
+            key: clearKey,
+            icon: Icons.auto_fix_high,
+            label: "Yanlış Sil",
+            cost: 60,
+            onTap: canUseClear ? () => notifier.clearWrong() : null,
+          ),
+          _JokerButton(
+            key: revealKey,
+            icon: Icons.visibility_outlined,
+            label: "Tekrar",
+            cost: 40,
+            onTap: canUseReveal ? () => notifier.showAgain() : null,
+          ),
+        ],
+      ),
+    );
   }
 }
 
-/// Joker Buton Tasarımı (Hatanın çözümü için bu sınıfı ekledik)
 class _JokerButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final int cost;
   final VoidCallback? onTap;
 
-  // HATA BURADAYDI: Constructor'a 'super.key' parametresini ekledik
   const _JokerButton({
-    super.key, // <--- BU SATIRI EKLEYİN
+    super.key,
     required this.icon,
     required this.label,
     required this.cost,

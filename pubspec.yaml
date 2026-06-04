@@ -15,13 +15,14 @@ dependencies:
   flutter_animate: ^4.5.0
   google_fonts: ^6.2.1
   shared_preferences: ^2.2.3
+  flutter_native_splash: ^2.4.4
+
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-  flutter_native_splash: ^2.4.4
 
 # Uygulama ikon ayarları kalıyor
 flutter_launcher_icons:
@@ -37,13 +38,18 @@ flutter:
   # Kendi Splash Screen'in için gerekli görsel asset'i
   assets:
     - lib/assets/images/splash/splash.png
+    - lib/assets/icon/lexmory_native_splash.png
 
 flutter_native_splash:
-  color: "#1A1A1A"
-  image: lib/assets/icon/lexmory_icon.png
+  color: "#050505"
+  image: lib/assets/icon/lexmory_native_splash.png
 
   android_12:
-    color: "#1A1A1A"
-    image: lib/assets/icon/lexmory_icon.png
-    icon_background_color: "#1A1A1A"
+    color: "#050505"
+    image: lib/assets/icon/lexmory_native_splash.png
+    icon_background_color: "#050505"
+
+  android: true
+  ios: true
+  web: false
 

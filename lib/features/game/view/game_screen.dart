@@ -9,6 +9,7 @@ import '../../tutorial/widgets/tutorial_success_overlay.dart';
 import '../models/game_state.dart';
 import '../providers/game_provider.dart';
 
+import '../services/reward_calculator.dart';
 import '../widgets/category_complete_overlay.dart';
 import '../widgets/game_finished_overlay.dart';
 import '../widgets/game_header.dart';
@@ -104,9 +105,18 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             PremiumRewardOverlay(
               isVisible: game.showVictoryPanel,
               baseReward: 25,
-              memoryBonus: game.wrongAttemptsCount == 0 ? 10 : 0,
-              masterBonus: game.jokersUsedCount == 0 ? 15 : 0,
-              multiplier: _getMultiplier(game.streak),
+
+              // Memory Bonus Gösterimi (Hesaplayıcı ile aynı mantık)
+              memoryBonus: game.wrongAttemptsCount == 0 ? 15 :
+              game.wrongAttemptsCount == 1 ? 10 :
+              game.wrongAttemptsCount == 2 ? 5 : 0,
+
+              // Master (No Hint) Bonus Gösterimi
+              masterBonus: game.jokersUsedCount == 0 ? 15 :
+              game.jokersUsedCount == 1 ? 10 :
+              game.jokersUsedCount == 2 ? 5 : 0,
+
+              multiplier: RewardCalculator.getMultiplierValue(game.streak),
               totalReward: game.lastRewardTotal,
             ),
 
@@ -220,169 +230,156 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   // Tutorial adımlarını oluşturan yardımcı metod
-  Widget _buildTutorialStep(TutorialStep step, GameState game) {    String text = "";
-  GlobalKey? targetKey;
-  bool showButton = true;
+  Widget _buildTutorialStep(TutorialStep step, GameState game) {
+    // Not: Tüm adımlar return ile bittiği için artık değişken tanımlamaya gerek yok.
 
-  // --- YENİ: Metnin altta sabit kalması gereken adımları tanımlıyoruz ---
-  final bool isInitialStep = [
-    TutorialStep.category,
-    TutorialStep.wordBoxes,
-    TutorialStep.grid,
-    TutorialStep.startButton,
-    TutorialStep.findingLetters,
-    TutorialStep.success,
-  ].contains(step);
+    switch (step) {
+    // --- PHASE 1: YÖNLENDİRMELİ (ALTTA SABİT) ---
+      case TutorialStep.category:
+        return TutorialOverlay(
+          targetKey: _categoryKey,
+          currentStep: step,
+          isInitialPhase: true,
+          text: "Her bölümde bir kategori görürsün.\nKategori sana kelime hakkında ipucu verir.",
+          onNext: () => ref.read(tutorialProvider.notifier).nextStep(),
+        );
 
-  switch (step) {
-    case TutorialStep.category:
-      text = "Her bölümde bir kategori görürsün.\nKategori sana kelime hakkında ipucu verir.";
-      targetKey = _categoryKey;
-      break;
-    case TutorialStep.wordBoxes:
-      text = "Bulman gereken kelime burada yer alır.";
-      targetKey = _wordAreaKey;
-      break;
-    case TutorialStep.grid:
-      text = "Harfleri dikkatlice incele.\nBirazdan kapanacaklar.";
-      targetKey = _gridKey;
-      break;
-    case TutorialStep.startButton:
-    // Bu adım özel bir overlay döndürdüğü için parametreyi doğrudan içine ekliyoruz
-      return TutorialOverlay(
-        targetKey: _startButtonKey,
-        currentStep: step,
-        isInitialPhase: true, // Metin altta kalsın
-        text: "Kelimeyi gördüğünde BULDUM butonuna bas.",
-        showButton: false,
-        onNext: () {},
-      );
+      case TutorialStep.wordBoxes:
+        return TutorialOverlay(
+          targetKey: _wordAreaKey,
+          currentStep: step,
+          isInitialPhase: true,
+          text: "Bulman gereken kelime burada yer alır.",
+          onNext: () => ref.read(tutorialProvider.notifier).nextStep(),
+        );
 
-    case TutorialStep.findingLetters:
-      final int nextEmptyIndex = game.foundLetters.indexOf(null);
-      if (nextEmptyIndex != -1) {
-        final String targetChar = game.targetWord[nextEmptyIndex];
-        int tileIndexInGrid = -1;
-        for (int i = 0; i < game.gridLetters.length; i++) {
-          if (game.gridLetters[i] == targetChar && !game.selectedIndices.contains(i)) {
-            tileIndexInGrid = i;
-            break;
+      case TutorialStep.grid:
+        return TutorialOverlay(
+          targetKey: _gridKey,
+          currentStep: step,
+          isInitialPhase: true,
+          text: "Harfleri dikkatlice incele.\nBirazdan kapanacaklar.",
+          onNext: () => ref.read(tutorialProvider.notifier).nextStep(),
+        );
+
+      case TutorialStep.startButton:
+        return TutorialOverlay(
+          targetKey: _startButtonKey,
+          currentStep: step,
+          isInitialPhase: true,
+          text: "Kelimeyi gördüğünde BULDUM butonuna bas.",
+          showButton: false,
+          onNext: () {},
+        );
+
+      case TutorialStep.findingLetters:
+        final int nextEmptyIndex = game.foundLetters.indexOf(null);
+        GlobalKey? targetKey;
+        String text = "";
+
+        if (nextEmptyIndex != -1) {
+          final String targetChar = game.targetWord[nextEmptyIndex];
+          int tileIndexInGrid = -1;
+          for (int i = 0; i < game.gridLetters.length; i++) {
+            if (game.gridLetters[i] == targetChar && !game.selectedIndices.contains(i)) {
+              tileIndexInGrid = i;
+              break;
+            }
           }
+          if (tileIndexInGrid != -1) {
+            targetKey = _gridTileKeys[tileIndexInGrid];
+          }
+          text = targetChar == "L"
+              ? "Harika! Şimdi harfler kapandı.\nHafızandan 'L' harfini bul ve bas."
+              : "Çok iyi! Şimdi son harf olan 'A' harfine bas.";
         }
-        if (tileIndexInGrid != -1) {
-          targetKey = _gridTileKeys[tileIndexInGrid];
-        }
-        text = targetChar == "L"
-            ? "Harika! Şimdi harfler kapandı.\nHafızandan 'L' harfini bul ve bas."
-            : "Çok iyi! Şimdi son harf olan 'A' harfine bas.";
-      }
-      // Bu adım özel bir overlay döndürdüğü için parametreyi doğrudan içine ekliyoruz
-      return TutorialOverlay(
-        targetKey: targetKey ?? _gridKey,
-        currentStep: step,
-        isInitialPhase: true, // Metin altta kalsın
-        text: text,
-        showButton: false,
-        onNext: () {},
-      );
+        return TutorialOverlay(
+          targetKey: targetKey ?? _gridKey,
+          currentStep: step,
+          isInitialPhase: true,
+          text: text,
+          showButton: false,
+          onNext: () {},
+        );
 
-    case TutorialStep.success:
-      text = "Tebrikler!\nTemel mekaniği başarıyla tamamladın.";
-      targetKey = _wordAreaKey; // Success için bir hedef key ekleyelim
-      showButton = true;
-      break;
+      case TutorialStep.success:
+        return TutorialOverlay(
+          targetKey: _wordAreaKey,
+          currentStep: step,
+          isInitialPhase: true,
+          text: "Tebrikler!\nTemel mekaniği başarıyla tamamladın.",
+          onNext: () => ref.read(tutorialProvider.notifier).nextStep(),
+        );
 
-    case TutorialStep.phase2Intro:
-      return TutorialPhase2Intro(
-        onStart: () {
-          ref.read(gameProvider.notifier).resetGameForTutorial();
-          ref.read(tutorialProvider.notifier).startPhase2Practice();
-        },
-      );
-    case TutorialStep.phase2Play:
-      return const SizedBox.shrink();
+    // --- PHASE 2: SERBEST DENEYİM ---
+      case TutorialStep.phase2Intro:
+        return TutorialPhase2Intro(
+          onStart: () {
+            ref.read(gameProvider.notifier).resetGameForTutorial();
+            ref.read(tutorialProvider.notifier).startPhase2Practice();
+          },
+        );
 
-    case TutorialStep.forcedHint:
-      return TutorialOverlay(
-        targetKey: _hintKey,
-        currentStep: step,
-        isInitialPhase: false, // Jokerlerde yukarı çıkabilsin
-        text: "💡 Harf Aç Jokeri\n\nBu joker senin için doğru bir harf ekler.\nDenemek için şimdi butona dokun.",
-        showButton: false,
-        onNext: () {},
-      );
+      case TutorialStep.phase2Play:
+        return const SizedBox.shrink();
 
-    case TutorialStep.forcedClear:
-      return TutorialOverlay(
-        targetKey: _clearKey,
-        currentStep: step,
-        isInitialPhase: false, // Jokerlerde yukarı çıkabilsin
-        text: "❌ Yanlış Sil Jokeri\n\nGriddeki yanlış harfleri eler.\nDenemek için şimdi butona dokun.",
-        showButton: false,
-        onNext: () {},
-      );
+    // --- PHASE 3: CONTEXTUAL (DİNAMİK KONUM) ---
+      case TutorialStep.forcedHint:
+        return TutorialOverlay(
+          targetKey: _hintKey,
+          currentStep: step,
+          isInitialPhase: false,
+          text: "💡 Harf Aç Jokeri\n\nBu joker senin için doğru bir harf ekler.\nDenemek için şimdi butona dokun.",
+          showButton: false,
+          onNext: () {},
+        );
 
-    case TutorialStep.tokenInfo:
-      return TutorialOverlay(
-        // Token göstergesini veya herhangi bir yeri hedef alabiliriz,
-        // genel bilgi olduğu için null key vererek merkeze de alabiliriz.
-        targetKey: GlobalKey(),
-        text: "Yanlış harf seçimleri 5 token kaybettirir.\n"
-            "Joker kullanımları da token harcar.\n\n"
-            "Tokenların azaldığında zamanla yenilenir veya "
-            "reklam izleyerek kazanabilirsin.",
-        buttonText: "Anladım",
-        currentStep: step,
-        onNext: () {
-          ref.read(tutorialProvider.notifier).closeTokenTutorial();
-        },
-      );
+      case TutorialStep.forcedClear:
+        return TutorialOverlay(
+          targetKey: _clearKey,
+          currentStep: step,
+          isInitialPhase: false,
+          text: "❌ Yanlış Sil Jokeri\n\nGriddeki yanlış harfleri eler.\nDenemek için şimdi butona dokun.",
+          showButton: false,
+          onNext: () {},
+        );
 
-    case TutorialStep.completed:
-      return TutorialSuccessOverlay(
-        title: "Artık Hazırsın!",
-        message: "Gerçek kategoriler ve kelimeler seni bekliyor.",
-        buttonText: "Gerçek Oyuna Başla",
-        onStartGame: () async {
-          await ref.read(tutorialProvider.notifier).completeTutorial();
-          ref.read(gameProvider.notifier).resetGame();
-          await Future.delayed(const Duration(milliseconds: 1000));
-          ref.read(tutorialProvider.notifier).startJokerOnboarding();
-        },
-      );
+      case TutorialStep.forcedReveal:
+        return TutorialOverlay(
+          targetKey: _revealKey,
+          currentStep: step,
+          isInitialPhase: false,
+          text: "👁 Tekrar Butonu\n\nHarfleri unuttuğunda buna basarak kısa süreliğine tekrar görebilirsin.\n\nBu kullanım ücretsizdir.",
+          showButton: false,
+          onNext: () {},
+        );
 
-    case TutorialStep.forcedReveal:
-      return TutorialOverlay(
-        targetKey: _revealKey,
-        currentStep: step,
-        isInitialPhase: false, // Jokerlerde yukarı çıkabilsin
-        text: "👁 Tekrar Butonu\n\nHarfleri unuttuğunda buna basarak kısa süreliğine tekrar görebilirsin.\n\nBu kullanım ücretsizdir.",
-        showButton: false,
-        onNext: () {},
-      );
-  }
+      case TutorialStep.tokenInfo:
+        return TutorialOverlay(
+          targetKey: _tokenKey, // Token göstergesini hedef alalım
+          currentStep: step,
+          isInitialPhase: false,
+          text: "TOKENLAR\n\nYanlış harf seçimleri 5 token kaybettirir.\n"
+              "Joker kullanımları da token harcar.\n\n"
+              "Tokenların azaldığında zamanla yenilenir veya "
+              "reklam izleyerek kazanabilirsin.",
+          buttonText: "Anladım",
+          onNext: () => ref.read(tutorialProvider.notifier).closeTokenTutorial(),
+        );
 
-  // switch dışındaki (varsayılan) dönüşler için:
-  return TutorialOverlay(
-    targetKey: targetKey ?? _jokerKey,
-    currentStep: step,
-    isInitialPhase: isInitialStep, // Listemize göreyse altta sabit kalsın
-    text: text,
-    onNext: () => ref.read(tutorialProvider.notifier).nextStep(),
-    showButton: showButton,
-  );
-  }
-
-  void _showTokenTutorialDialog(BuildContext context) {showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => TutorialSuccessOverlay( // Mevcut şık yapını kullanıyoruz
-      title: "Tokenlar",
-      message: "Yanlış seçimler token kaybettirir.\nJoker kullanımları da token harcar.\n\nTokenlarını dikkatli kullan.",
-      buttonText: "Anladım",
-      onStartGame: () => Navigator.of(context).pop(),
-    ),
-  );
+      case TutorialStep.completed:
+        return TutorialSuccessOverlay(
+          title: "Artık Hazırsın!",
+          message: "Gerçek kategoriler ve kelimeler seni bekliyor.",
+          buttonText: "Gerçek Oyuna Başla",
+          onStartGame: () async {
+            await ref.read(tutorialProvider.notifier).completeTutorial();
+            ref.read(gameProvider.notifier).resetGame();
+            await Future.delayed(const Duration(milliseconds: 1000));
+            ref.read(tutorialProvider.notifier).startJokerOnboarding();
+          },
+        );
+    }
   }
 
   Widget _buildStartButton(GameState game) {
@@ -432,11 +429,4 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-  double _getMultiplier(int streak) {
-    if (streak <= 1) return 1.0;
-    if (streak == 2) return 1.1;
-    if (streak == 3) return 1.2;
-    if (streak == 4) return 1.3;
-    return 1.5;
-  }
 }

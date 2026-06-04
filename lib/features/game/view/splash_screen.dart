@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math; // math kütüphanesini ekledik
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -12,19 +14,30 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  final List<bool> _isRevealed = [false, false, false, false, false];
+  final List<String> _letters = ["L", "X", "M", "R", "Y"];
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
     _initApp();
   }
 
   Future<void> _initApp() async {
-    // Native splash'i kaldır
-    FlutterNativeSplash.remove();
+    await Future.delayed(500.ms);
 
-    // 3 saniye animasyon süresi (toplam 4 sn bekleme)
-    await Future.delayed(const Duration(seconds: 4));
+    for (int i = 0; i < _letters.length; i++) {
+      if (!mounted) return;
+      await Future.delayed(400.ms);
+      setState(() {
+        _isRevealed[i] = true;
+      });
+    }
 
+    await Future.delayed(1500.ms);
     if (!mounted) return;
 
     Navigator.pushReplacement(
@@ -39,52 +52,44 @@ class _SplashScreenState extends State<SplashScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Fullscreen Arka Plan
           Image.asset(
             "lib/assets/images/splash/splash.png",
             fit: BoxFit.cover,
           ),
-
-          // 2. Koyu Overlay
           Container(
-            color: Colors.black.withOpacity(0.55),
+            color: Colors.black.withValues(alpha:0.6),
           ),
-
-          // 3. İçerik (Taşma korumalı)
           SafeArea(
             child: Align(
               alignment: Alignment.bottomCenter,
-              child: SingleChildScrollView( // KRİTİK: Dikey taşmayı önler
-                physics: const NeverScrollableScrollPhysics(), // Kaydırmayı engelle, sadece taşmayı gizle
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 60, top: 20),
+                  padding: const EdgeInsets.only(bottom: 80, top: 20),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min, // Sadece içeriği kadar yer kapla
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // L E X M O - Harf Tile'ları
-                      // Taşmayı önlemek için Row'u Wrap ile değiştirebiliriz veya Row kalsın diyorsanız:
-                      FittedBox( // Küçük ekranlarda Row'un sığmasını sağlar
+                      FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: _buildLetterTiles(),
+                          children: List.generate(_letters.length, (index) {
+                            return _buildAnimatedTile(index);
+                          }),
                         ),
                       ),
-                      const SizedBox(height: 32),
-
-                      // Yükleniyor Yazısı
+                      const SizedBox(height: 40),
                       Text(
                         "YÜKLENİYOR...",
                         style: GoogleFonts.poppins(
                           color: Colors.white60,
-                          fontSize: 13,
+                          fontSize: 12,
                           letterSpacing: 4,
                           fontWeight: FontWeight.w500,
                         ),
                       )
                           .animate(onPlay: (c) => c.repeat())
-                          .shimmer(duration: 1500.ms, color: Colors.amber.withOpacity(0.5)),
+                          .shimmer(duration: 2.seconds, color: Colors.amber.withValues(alpha:0.4)),
                     ],
                   ),
                 ),
@@ -96,59 +101,98 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 
-  List<Widget> _buildLetterTiles() {
-    final List<String> letters = ["L", "E", "X", "M", "O"];
+  Widget _buildAnimatedTile(int index) {
+    bool revealed = _isRevealed[index];
+    String char = _letters[index];
 
-    return letters.asMap().entries.map((entry) {
-      int index = entry.key;
-      String char = entry.value;
-
-      return Container(
-        width: 46,
-        height: 58,
-        margin: const EdgeInsets.symmetric(horizontal: 5),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2D2D2D),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.amber.withOpacity(0.4), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    return Container(
+      width: 50,
+      height: 62,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: revealed ? const Color(0xFF38473A) : const Color(0xFF2D2D2D),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: revealed ? Colors.greenAccent.withValues(alpha:0.6) : Colors.white24,
+          width: 2,
         ),
-        alignment: Alignment.center,
+        boxShadow: revealed
+            ? [
+          BoxShadow(
+            color: Colors.greenAccent.withValues(alpha:0.2),
+            blurRadius: 12,
+            spreadRadius: 1,
+          )
+        ]
+            : [],
+      ),
+      alignment: Alignment.center,
+      child: AnimatedSwitcher(
+        duration: 300.ms,
+        // Harfin ters dönmemesi için switcher içinde sadece Fade kullanıyoruz
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return FadeTransition(opacity: animation, child: child);
+        },
         child: Text(
-          char,
+          revealed ? char : "?",
+          key: ValueKey<bool>(revealed),
           style: GoogleFonts.baloo2(
-            color: Colors.white,
-            fontSize: 26,
+            color: revealed ? Colors.white : Colors.white38,
+            fontSize: 28,
             fontWeight: FontWeight.bold,
           ),
         ),
-      )
-          .animate(onPlay: (controller) => controller.repeat())
-          .flipH(
-        begin: 0,
-        end: 2,
-        duration: 900.ms,
-        delay: (300 * index).ms,
-        curve: Curves.easeInOutBack,
-      )
-          .scale(
-        begin: const Offset(1, 1),
-        end: const Offset(1.08, 1.08),
-        duration: 450.ms,
-        delay: (300 * index).ms,
-      )
-          .then()
-          .scale(
-        begin: const Offset(1.08, 1.08),
-        end: const Offset(1, 1),
-        duration: 450.ms,
-      );
-    }).toList();
+      ),
+    )
+        .animate(target: revealed ? 1 : 0)
+        .custom(
+      duration: 600.ms,
+      builder: (context, value, child) {
+        // Kartın dönüş açısı (0 - 180 derece)
+        final double angle = value * math.pi;
+
+        return Transform(
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.001)
+            ..rotateY(angle),
+          alignment: Alignment.center,
+          // KRİTİK DÜZELTME:
+          // Kart 90 dereceyi geçtiğinde (arka yüzü bize dönerken)
+          // içeriği tekrar 180 derece döndürüyoruz ki harf DÜZ görünsün.
+          child: angle > (math.pi / 2)
+              ? Transform(
+            transform: Matrix4.identity()..rotateY(math.pi),
+            alignment: Alignment.center,
+            child: child,
+          )
+              : child,
+        );
+      },
+    )
+        .shimmer(delay: 200.ms, duration: 400.ms);
+  }
+}
+
+// RotationYTransition sınıfı kullanılmıyor ancak kod yapısını bozmamak adına bırakılmıştır.
+class RotationYTransition extends AnimatedWidget {
+  const RotationYTransition({
+    super.key,
+    required Animation<double> turns,
+    this.child,
+  }) : super(listenable: turns);
+
+  Animation<double> get turns => listenable as Animation<double>;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final double angle = turns.value * math.pi;
+    return Transform(
+      transform: Matrix4.identity()
+        ..setEntry(3, 2, 0.001)
+        ..rotateY(angle),
+      alignment: Alignment.center,
+      child: child,
+    );
   }
 }

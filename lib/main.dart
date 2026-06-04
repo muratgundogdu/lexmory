@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// 1. Native Splash paketini import et
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:lexmory/features/game/view/splash_screen.dart';
 
 import 'core/app_theme.dart';
 import 'core/app_colors.dart';
-import 'features/game/view/game_screen.dart';
 
 void main() {
   // 2. Binding'i bir değişkene ata (Native splash için zorunlu)

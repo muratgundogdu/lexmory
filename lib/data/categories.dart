@@ -1154,14 +1154,6 @@ final categories = [
     "words": ["MADDE", "HAK", "MECLİS", "YARGI", "YASA", "DEVLET", "VATANDAŞ"],
   },
   {
-    "id": 171,
-    "unlockOrder": 145,
-    "difficulty": 4,
-    "progressionScore": 405.33,
-    "category": "Kriptografi",
-    "words": ["HASH", "İMZA", "ALGORİTMA", "AES", "RSA", "DOĞRULAMA"],
-  },
-  {
     "id": 155,
     "unlockOrder": 146,
     "difficulty": 4,

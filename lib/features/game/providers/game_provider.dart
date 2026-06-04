@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/app_constants.dart';
@@ -140,7 +139,8 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   static GameState _createInitialState(GameRepository repository, {int? existingTokens, DateTime? lastRegen}) {
-    final selectedCatData = repository.getRandomCategory();
+// getRandomCategory yerine getNextCategory([]) kullanıyoruz (Henüz tamamlanan yok)
+    final selectedCatData = repository.getNextCategory([]);
     final String catName = selectedCatData['category'] as String;
     final List<String> words = repository.getWordsForCategory(selectedCatData);
 
@@ -195,12 +195,13 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   void selectLetter(int index) {
+    // Sadece zorunlu eğitim adımlarında kilit varsa durdur (Opsiyonel)
     if (state.tutorialLock) return;
 
     final tutorialState = _ref.read(tutorialProvider);
 
     if (tutorialState.isTutorialActive) {
-      // --- FAZ 2: SERBEST DENEYİM (SPOTLIGHTSIZ) ---
+      // --- FAZ 2: SERBEST DENEYİM ---
       if (tutorialState.phase == TutorialPhase.phase2) {
         if (state.isInitialReveal || state.selectedIndices.contains(index) || !state.hasStarted) return;
 
@@ -211,18 +212,16 @@ class GameNotifier extends StateNotifier<GameState> {
           final expectedLetter = state.targetWord[nextTargetIndex];
 
           if (tappedLetter == expectedLetter) {
+            // ANINDA İŞLE
             _handleCorrectSelection(index, nextTargetIndex, tappedLetter);
 
-            // KRİTİK: State güncellenmeden önce listenin kopyasıyla kontrol
             final List<String?> checkList = [...state.foundLetters];
             checkList[nextTargetIndex] = tappedLetter;
 
             if (!checkList.contains(null)) {
-              // Kelime bitti, TutorialController'a haber ver (Final ekranına geçer)
+              // Kelime bittiğinde çıkan popup için makul bir bekleme (Sadece burada bekleme kalsın)
               Future.delayed(const Duration(milliseconds: 1500), () {
-                if (mounted) {
-                  _ref.read(tutorialProvider.notifier).nextStep();
-                }
+                if (mounted) _ref.read(tutorialProvider.notifier).nextStep();
               });
             }
           } else {
@@ -232,7 +231,7 @@ class GameNotifier extends StateNotifier<GameState> {
         return;
       }
 
-      // --- FAZ 1: YÖNLENDİRMELİ EĞİTİM (SPOTLIGHTLI) ---
+      // --- FAZ 1: YÖNLENDİRMELİ EĞİTİM ---
       if (tutorialState.currentStep == TutorialStep.findingLetters) {
         final tappedLetter = state.gridLetters[index];
         final nextTargetIndex = state.foundLetters.indexOf(null);
@@ -247,9 +246,7 @@ class GameNotifier extends StateNotifier<GameState> {
 
             if (!checkList.contains(null)) {
               Future.delayed(const Duration(milliseconds: 2000), () {
-                if (mounted) {
-                  _ref.read(tutorialProvider.notifier).nextStep();
-                }
+                if (mounted) _ref.read(tutorialProvider.notifier).nextStep();
               });
             }
           }
@@ -258,7 +255,7 @@ class GameNotifier extends StateNotifier<GameState> {
       return;
     }
 
-    // --- NORMAL OYUN MANTIĞI ---
+    // --- NORMAL OYUN MANTIĞI (TAMAMEN ANLIK) ---
     if (state.isInitialReveal || state.selectedIndices.contains(index) || !state.hasStarted) return;
 
     final tappedLetter = state.gridLetters[index];
@@ -267,45 +264,40 @@ class GameNotifier extends StateNotifier<GameState> {
     if (nextTargetIndex == -1) return;
 
     if (tappedLetter == state.targetWord[nextTargetIndex]) {
+      // Bekleme yok, kilit yok.
       _handleCorrectSelection(index, nextTargetIndex, tappedLetter);
     } else {
       _handleWrongSelection(index);
     }
   }
 
-// 1. ADIM: Bu metodu Future<void> yapın ve içindeki gecikmeyi await edin
-  Future<void> _handleCorrectSelection(
-      int gridIdx,
-      int targetIdx,
-      String letter,
-      ) async {
-    state = state.copyWith(
-      tutorialLock: true,
-      lastAttemptIndex: gridIdx,
-      isLastAttemptCorrect: true,
-      justFoundIndex: targetIdx,
-      selectedIndices: [...state.selectedIndices, gridIdx],
-    );
+// lib/features/game/providers/game_provider.dart
 
-    // 2. Harfin uçuş süresini (WordRevealArea'daki move süresi olan 650-800ms) bekle
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    if (!mounted) return;
-
-    // 3. Harfi kutuya yerleştir
+  void _handleCorrectSelection(int gridIdx, int targetIdx, String letter) {
+    // 1. Listeyi hemen kopyala ve güncelle
     final newFound = List<String?>.from(state.foundLetters);
     newFound[targetIdx] = letter;
 
+    // 2. State'i tek seferde, kilit koymadan güncelle
+    // tutorialLock her zaman false kalıyor, böylece input hiç kesilmiyor.
     state = state.copyWith(
+      tutorialLock: false,
+      lastAttemptIndex: gridIdx,
+      isLastAttemptCorrect: true,
+      justFoundIndex: targetIdx, // UI'daki pulse efektini tetikler
+      selectedIndices: [...state.selectedIndices, gridIdx],
       foundLetters: newFound,
-      justFoundIndex: null, // Uçuş objesini kaldır
-      tutorialLock: false, // Dokunma artık serbest
     );
 
+    // Veriyi kaydet
+    _persist();
+
+    // 3. Bölüm bitti mi kontrol et
     if (!newFound.contains(null)) {
       _handleWordVictory();
     }
   }
+
   void _handleWrongSelection(int gridIdx) async {
     HapticFeedback.mediumImpact();
     state = state.copyWith(
@@ -349,9 +341,16 @@ class GameNotifier extends StateNotifier<GameState> {
     }
 
     int currentStreak = state.streak;
-    if (state.wrongAttemptsCount == 0 && state.jokersUsedCount == 0) {
+
+    bool isPerfectView = state.wrongAttemptsCount == 0 && state.jokersUsedCount == 0;
+
+    if (isPerfectView) {
+      // Hiç hata yok, hiç joker yok -> Seri artar
       currentStreak += 1;
-    } else if (state.wrongAttemptsCount > 0) {
+    } else {
+      // Hata VEYA joker varsa -> Seri bozulur (sıfırlanır)
+      // Eğer serinin sadece hatada bozulmasını istiyorsan burayı eski halinde bırakabilirsin.
+      // Ama joker kullanımı "Perfect" seri mantığına aykırıdır.
       currentStreak = 0;
     }
 
@@ -423,6 +422,7 @@ class GameNotifier extends StateNotifier<GameState> {
     final List<String> words = _repository.getWordsForCategory(currentCatData);
 
     if (state.currentWordIndex + 1 < words.length) {
+      // AYNI KATEGORİDE SIRADAKİ KELİMEYE GEÇ
       state = _buildStateForWord(
         word: words[state.currentWordIndex + 1],
         category: state.category,
@@ -438,25 +438,22 @@ class GameNotifier extends StateNotifier<GameState> {
         lastRegen: state.lastRegenTime,
       );
     } else {
-      final remainingCats = categories.where((c) =>
-      !state.completedCategories.contains(c['category']) &&
-          c['category'] != state.category).toList();
+      final currentCompleted = [...state.completedCategories, state.category];
 
-      if (remainingCats.isNotEmpty) {
-        final nextCatData = remainingCats[Random().nextInt(remainingCats.length)];
-        state = _buildStateForWord(
-          word: (nextCatData['words'] as List)[0],
-          category: nextCatData['category'] as String,
-          tokens: state.tokens,
-          completedCats: [...state.completedCategories, state.category],
-          wordIdx: 0,
-          streak: state.streak,
-          rewardTrigger: state.rewardTrigger,
-          solvedWords: state.totalSolvedWords,
-          earnedTokens: state.totalEarnedTokens,
-          lastRegen: state.lastRegenTime,
-        );
-      }
+      final nextCatData = _repository.getNextCategory(currentCompleted);
+
+      state = _buildStateForWord(
+        word: (nextCatData['words'] as List)[0],
+        category: nextCatData['category'] as String,
+        tokens: state.tokens,
+        completedCats: currentCompleted,
+        wordIdx: 0,
+        streak: state.streak,
+        rewardTrigger: state.rewardTrigger,
+        solvedWords: state.totalSolvedWords,
+        earnedTokens: state.totalEarnedTokens,
+        lastRegen: state.lastRegenTime,
+      );
     }
     _persist();
   }
@@ -482,7 +479,6 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
 // --- HARF AÇ JOKERİ ---
-// --- HARF AÇ JOKERİ ---
   Future<void> useHint() async {
     if (state.tutorialLock) return;
     final tutorialController = _ref.read(tutorialProvider.notifier);
@@ -490,6 +486,7 @@ class GameNotifier extends StateNotifier<GameState> {
 
     final bool isForcedStep = tutorialState.currentStep == TutorialStep.forcedHint;
 
+    // Koruma: Tutorial aktifse ve doğru adımda değilsek işlem yapma
     if (tutorialState.isTutorialActive && tutorialState.phase != TutorialPhase.contextual) return;
     if (tutorialState.isTutorialActive && !isForcedStep) return;
 
@@ -506,6 +503,8 @@ class GameNotifier extends StateNotifier<GameState> {
 
     final char = state.targetWord[nextTargetIndex];
     int gridIdx = -1;
+
+    // Grid içinde harfin yerini bul
     for (int i = 0; i < state.gridLetters.length; i++) {
       if (state.gridLetters[i] == char && !state.selectedIndices.contains(i)) {
         gridIdx = i;
@@ -515,33 +514,42 @@ class GameNotifier extends StateNotifier<GameState> {
 
     if (gridIdx != -1) {
       if (isForcedStep) {
-        // 1. ADIM: Overlay'i anında kapat
+        // --- TUTORIAL AKIŞI ---
+        // 1. Overlay'i anında kapat
         tutorialController.completeJokerStep('hint_joker_tutorial_completed');
 
-        // 2. ADIM: Kart Dönme Animasyonu (600ms)
+        // 2. Kart Dönme Animasyonu Beklemesi (Görsel feedback için)
         state = state.copyWith(lastAttemptIndex: gridIdx, isLastAttemptCorrect: true);
         await Future.delayed(const Duration(milliseconds: 800));
 
-        // 3. ADIM: Harf Uçuş Animasyonu (800ms)
-        // Bu metodun bitmesini (harfin kutuya girmesini) bekliyoruz.
-        await _handleCorrectSelection(gridIdx, nextTargetIndex, char);
+        // 3. Harfi anında yerleştir (HandleCorrectSelection artık void olduğu için await yok)
+        _handleCorrectSelection(gridIdx, nextTargetIndex, char);
 
-        // --- DÜZELTME: Ekstra beklemeleri sildik, kontrolü tutorial metoduna devrettik ---
-        // Bu metod kendi içinde 3 saniye 'Premium Bekleme' yapacak ve Yanlış Sil'e geçecek.
+        // Tutorial bir sonraki adıma (Yanlış Sil) geçsin
         await tutorialController.nextStepWithDelay(
           animationDuration: Duration.zero,
         );
       } else {
-        // Normal oyun akışı...
+        // --- NORMAL OYUN AKIŞI ---
         state = state.copyWith(lastAttemptIndex: gridIdx, isLastAttemptCorrect: true);
         await Future.delayed(const Duration(milliseconds: 800));
-        await _handleCorrectSelection(gridIdx, nextTargetIndex, char);
+
+        // Harfi anında yerleştir
+        _handleCorrectSelection(gridIdx, nextTargetIndex, char);
       }
 
-      state = state.copyWith(tokens: state.tokens - cost);
+      // --- KRİTİK SAYAÇ GÜNCELLEMELERİ ---
+      // Bu kısım RewardCalculator'ın joker kullanıldığını anlamasını sağlar
+      state = state.copyWith(
+        tokens: state.tokens - cost,
+        jokersUsedCount: state.jokersUsedCount + 1, // Ödül panelinde bonusu düşürür
+        totalCategoryJokersCount: state.totalCategoryJokersCount + 1, // İstatistikler için
+      );
+
       if (isFree && !isForcedStep) {
         tutorialController.markFlag('free_hint_used');
       }
+
       _persist();
       _checkTokenStatus();
     }

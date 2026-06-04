@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/game_state.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // Eklendi
-import '../../tutorial/providers/tutorial_provider.dart'; // Eklendi
-import '../../tutorial/models/tutorial_state.dart'; // Eklendi
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class WordRevealArea extends ConsumerWidget { // StatelessWidget -> ConsumerWidget yapıldı
+class WordRevealArea extends ConsumerWidget {
   final GameState game;
   final List<GlobalKey>? boxKeys;
 
@@ -17,7 +15,6 @@ class WordRevealArea extends ConsumerWidget { // StatelessWidget -> ConsumerWidg
   });
 
   @override
-  // ref parametresi eklendi
   Widget build(BuildContext context, WidgetRef ref) {
     return LayoutBuilder(builder: (context, constraints) {
       final double screenWidth = MediaQuery.of(context).size.width;
@@ -32,7 +29,6 @@ class WordRevealArea extends ConsumerWidget { // StatelessWidget -> ConsumerWidg
 
       double boxHeight = boxWidth * 1.2;
       double fontSize = boxWidth * 0.65;
-      double totalWordRowWidth = wordLength * (boxWidth + (boxMargin * 2));
 
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -65,89 +61,40 @@ class WordRevealArea extends ConsumerWidget { // StatelessWidget -> ConsumerWidg
             ),
             alignment: Alignment.center,
             child: isFilled
-                ? _buildFlyingLetter(
-              index,
-              char,
-              fontSize,
-              isJustFound,
-              screenWidth,
-              totalWordRowWidth,
-              boxWidth,
-              boxMargin,
-              context, // <--- context parametresini buraya ekledik
-              ref, // 9. parametre olarak ref gönderildi
-            )
+                ? _buildLetter(char, fontSize, isJustFound)
                 : null,
-          )
-              .animate(target: isJustFound ? 1 : 0)
-              .scale(
-            begin: const Offset(1, 1),
-            end: const Offset(1.2, 1.2),
-            duration: 400.ms,
-            curve: Curves.elasticOut,
           );
         }),
       );
     });
   }
 
-  Widget _buildFlyingLetter(
-      int index,
-      String char,
-      double fontSize,
-      bool isJustFound,
-      double screenWidth,
-      double totalWordRowWidth,
-      double boxWidth,
-      double boxMargin,
-      BuildContext context, // <--- Parametreyi buraya ekledik
-      WidgetRef ref, // ref burada tanımlı
-      ) {
-    double beginX = 0;
-    double beginY = 0;
-
-    if (isJustFound && game.lastAttemptIndex != null) {
-      final int lastIdx = game.lastAttemptIndex!;
-      final int gridCol = lastIdx % 4;
-      final int gridRow = lastIdx ~/ 4;
-
-      final double gridX = 50 +
-          (gridCol * ((screenWidth - 100) / 4)) +
-          ((screenWidth - 100) / 8);
-
-      final double slotX = (screenWidth / 2) -
-          (totalWordRowWidth / 2) +
-          (index * (boxWidth + boxMargin * 2)) +
-          (boxWidth / 2 + boxMargin);
-
-      beginX = gridX - slotX;
-      beginY = 380.0 + (gridRow * 50.0);
-    }
-
+  /// Anlık beliren ve hafif efektli harf widget'ı
+  Widget _buildLetter(String char, double fontSize, bool isJustFound) {
     return Text(
       char,
       style: GoogleFonts.baloo2(
         fontSize: fontSize,
         fontWeight: FontWeight.bold,
         color: Colors.white,
+        // Yeni harf geldiğinde hafif bir dış ışıma (glow) ekler
+        shadows: isJustFound
+            ? [const Shadow(color: Colors.greenAccent, blurRadius: 15)]
+            : null,
       ),
     )
-        .animate(
-      key: ValueKey("fly_${game.targetWord}_$index\_$char"),
-    )
-        .fadeIn(duration: 150.ms)
-        .move(
-      begin: Offset(beginX, beginY),
-      end: Offset.zero,
-      duration: 650.ms,
-      curve: Curves.easeInOutExpo,
-    )
+        .animate(target: isJustFound ? 1 : 0)
+    // 1. Anlık görsel tepki için hızlı bir büyüme efekti (200ms)
         .scale(
-      begin: isJustFound ? const Offset(0.4, 0.4) : const Offset(1, 1),
-      end: const Offset(1, 1),
-      duration: 650.ms,
+      begin: const Offset(0.7, 0.7),
+      end: const Offset(1.0, 1.0),
+      duration: 200.ms,
       curve: Curves.easeOutBack,
     )
-        .shimmer(delay: 600.ms, duration: 800.ms, color: Colors.white54);
+    // 2. Yeni yerleşen harfe dikkat çekmek için kısa süreli parlama
+        .shimmer(
+      duration: 400.ms,
+      color: Colors.white54,
+    );
   }
 }
