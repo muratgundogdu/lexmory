@@ -1,15 +1,15 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
-
-import '../../../widgets/regen_countdown.dart';
+import '../../../core/app_colors.dart';
+import '../../../core/app_dimens.dart';
+import '../../../core/app_typography.dart';
 
 class OutOfTokensOverlay extends StatelessWidget {
   final bool isVisible;
   final int currentTokens;
   final DateTime lastRegen;
-  final int rewardAmount; // <--- BU SATIRI EKLEYİN
+  final int rewardAmount;
   final VoidCallback onWatchAd;
   final VoidCallback onStore;
   final bool isDismissible;
@@ -20,7 +20,7 @@ class OutOfTokensOverlay extends StatelessWidget {
     required this.isVisible,
     required this.currentTokens,
     required this.lastRegen,
-    required this.rewardAmount, // <--- BU SATIRI EKLEYİN
+    required this.rewardAmount,
     required this.onWatchAd,
     required this.onStore,
     required this.isDismissible,
@@ -32,118 +32,80 @@ class OutOfTokensOverlay extends StatelessWidget {
     if (!isVisible) return const SizedBox.shrink();
 
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
       child: Container(
-        // YENİ: withValues kullanımı
-        color: Colors.black.withValues(alpha: 0.8),
+        color: AppColors.background.withValues(alpha: 0.85),
         child: Center(
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               Container(
                 width: 320,
-                padding: const EdgeInsets.all(30),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.s24,
+                    vertical: AppDimens.s32
+                ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2D1B18),
-                  borderRadius: BorderRadius.circular(30),
-                  // YENİ: withValues kullanımı
-                  border: Border.all(
-                    color: Colors.amber.withValues(alpha: 0.2),
-                    width: 2,
-                  ),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
+                  border: Border.all(color: AppColors.border, width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      // YENİ: withValues kullanımı
                       color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 30,
+                      blurRadius: 40,
+                      offset: const Offset(0, 20),
                     )
                   ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text("🪙", style: TextStyle(fontSize: 60)),
-                    const SizedBox(height: 20),
-                    Text(
-                      "TOKENLARIN TÜKENDİ",
-                      style: GoogleFonts.baloo2(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.amber,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      "Reklam izleyerek anında $rewardAmount token kazanabilirsin!",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 40),
+                    Text("🪙", style: TextStyle(fontSize: AppDimens.iconXL + 12)),
+                    const SizedBox(height: AppDimens.s24),
 
-                    _buildActionButton(
-                      label: "REKLAM İZLE",
-                      subLabel: "$rewardAmount TOKEN",
-                      icon: Icons.play_circle_fill,
-                      color: Colors.amber.shade700,
+                    Text(
+                      "TOKENLAR TÜKENDİ",
+                      textAlign: TextAlign.center,
+                      style: AppTypography.pageTitle.copyWith(color: AppColors.primary),
+                    ),
+
+                    const SizedBox(height: AppDimens.s12),
+
+                    Text(
+                      "Reklam izleyerek anında $rewardAmount token kazanabilirsin.",
+                      textAlign: TextAlign.center,
+                      style: AppTypography.bodyMedium,
+                    ),
+
+                    const SizedBox(height: AppDimens.s32),
+
+                    _buildLexButton(
+                      label: "ÜCRETSİZ TOKEN",
+                      subLabel: "+$rewardAmount TOKEN KAZAN",
+                      icon: Icons.play_arrow_rounded,
+                      isPrimary: true,
                       onTap: onWatchAd,
                     ),
 
-                    const SizedBox(height: 15),
+                    const SizedBox(height: AppDimens.s12),
 
-                    _buildActionButton(
-                      label: "MAĞAZAYA GİT",
-                      subLabel: "TOKEN SATIN AL",
-                      icon: Icons.shopping_bag,
-                      color: Colors.white10,
+                    _buildLexButton(
+                      label: "MAĞAZA",
+                      subLabel: "DAHA FAZLASINI AL",
+                      icon: Icons.shopping_bag_outlined,
+                      isPrimary: false,
                       onTap: onStore,
                     ),
-
-                    const SizedBox(height: 30),
-
-                    if (currentTokens < 100)
-                      RegenCountdown(
-                        lastRegenTime: lastRegen,
-                        currentTokens: currentTokens,
-                        style: GoogleFonts.poppins(
-                          // YENİ: withValues kullanımı
-                          color: Colors.amber.withValues(alpha: 0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1,
-                        ),
-                      ),
                   ],
                 ),
-              ).animate().scale(curve: Curves.easeOutBack, duration: 500.ms),
+              ).animate().fade().scale(curve: Curves.easeOutBack),
 
               if (isDismissible)
                 Positioned(
-                  top: -10,
-                  right: -10,
-                  child: GestureDetector(
-                    onTap: onClose,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4E342E),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white24, width: 2),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black45,
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          )
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ).animate().fadeIn(delay: 500.ms).scale(),
+                  top: -AppDimens.s12,
+                  right: -AppDimens.s12,
+                  child: _buildCloseButton(),
+                ),
             ],
           ),
         ),
@@ -151,34 +113,73 @@ class OutOfTokensOverlay extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton({
+  Widget _buildLexButton({
     required String label,
     required String subLabel,
     required IconData icon,
-    required Color color,
-    required VoidCallback onTap
+    required bool isPrimary,
+    required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 15),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
-                Text(subLabel, style: const TextStyle(fontSize: 10, color: Colors.white70)),
-              ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              vertical: AppDimens.s16,
+              horizontal: AppDimens.s20
+          ),
+          decoration: BoxDecoration(
+            color: isPrimary ? AppColors.primary : AppColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
+            border: Border.all(
+              color: isPrimary ? AppColors.primary : AppColors.border,
+              width: 1.5,
             ),
-          ],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: isPrimary ? AppColors.background : AppColors.primary),
+              const SizedBox(width: AppDimens.s16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: AppTypography.labelSmall.copyWith(
+                      color: isPrimary ? AppColors.background : AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    subLabel,
+                    style: AppTypography.bodyMedium.copyWith(
+                      fontSize: 10,
+                      color: isPrimary ? AppColors.background.withValues(alpha: 0.7) : AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Icon(Icons.chevron_right, color: isPrimary ? AppColors.background : AppColors.border),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCloseButton() {
+    return GestureDetector(
+      onTap: onClose,
+      child: Container(
+        padding: const EdgeInsets.all(AppDimens.s8),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+        ),
+        child: const Icon(Icons.close, color: AppColors.textSecondary, size: 20),
       ),
     );
   }

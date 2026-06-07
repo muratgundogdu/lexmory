@@ -2,15 +2,18 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../core/app_colors.dart';
+import '../../../core/app_dimens.dart';
+import '../../../core/app_typography.dart';
+import '../../../core/utils.dart';
 import '../../../widgets/regen_countdown.dart';
 import '../models/game_state.dart';
 
 class GameHeader extends ConsumerStatefulWidget {
   final GameState game;
-  final GlobalKey tokenKey;    // Token kutusu için
-  final GlobalKey? categoryKey; // Kategori metni için (Tutorial için eklendi)
+  final GlobalKey tokenKey;
+  final GlobalKey? categoryKey;
 
   const GameHeader({
     super.key,
@@ -42,7 +45,7 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
     if (widget.game.rewardTrigger > oldWidget.game.rewardTrigger) {
       setState(() => _showParticles = true);
       Future.delayed(const Duration(milliseconds: 2500), () {
-        if (mounted){ setState(() => _showParticles = false);}
+        if (mounted) setState(() => _showParticles = false);
       });
     }
 
@@ -80,54 +83,150 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
     super.dispose();
   }
 
-// build metodundaki Column yapısını şu şekilde güncelle:
   @override
   Widget build(BuildContext context) {
     final bool isPenalty = widget.game.isLastAttemptCorrect == false;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildCategoryInfo(),
-          // Token ve Geri Sayım Alanı
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildTokenBadge(isPenalty),
-              const SizedBox(height: 4),
-              // HEADER ALTINDAKİ GERİ SAYIM
-              RegenCountdown(
-                lastRegenTime: widget.game.lastRegenTime,
-                currentTokens: widget.game.tokens,
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  color: Colors.white38,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.5,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 1. SATIR: [TOKEN] --- [KATEGORİ Etiketi] --- [STREAK]
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // SOL: Token ve Sayaç alanı
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _buildTokenArea(isPenalty),
+              ),
+            ),
+
+            // ORTA: Kategori Etiketi ve İsim Bloğu
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10), // TokenBadge ile hizalamak için
+                Text(
+                  "KATEGORİ",
+                  style: AppTypography.labelSmall.copyWith(
+                    color: AppColors.textMuted,
+                    letterSpacing: 3.0,
+                    fontSize: 10,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Dinamik Kategori Adı (Burayı tutorial Key ile sarmaladık)
+                Container(
+                  key: widget.categoryKey,
+                  child: Column(
+                    children: [
+                      Text(
+                        widget.game.category.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: AppTypography.pageTitle.copyWith(
+                          fontSize: 22, // İstediğin %15 küçültülmüş boyut
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.textPrimary,
+                          letterSpacing: 1.2,
+                          shadows: [
+                            Shadow(
+                              color: AppColors.primary.withValues(alpha: 0.2),
+                              blurRadius: 15,
+                            )
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      // Altın Dekoratif Çizgi
+                      Container(
+                        width: 30,
+                        height: 2,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          gradient: const LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              AppColors.primary,
+                              Colors.transparent
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1),
+              ],
+            ),
+
+            // SAĞ: Streak Badge
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: _buildStreakArea(),
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildCategoryInfo() {
+  Widget _buildTokenArea(bool isPenalty) {
     return Column(
-      key: widget.categoryKey, // ANAHTARI BURAYA BAĞLA
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        const Text("KATEGORİ",
-            style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.2)),
-        Text(widget.game.category,
-            style: GoogleFonts.baloo2(
-                fontSize: 24, fontWeight: FontWeight.bold, color: Colors.amber[100])),
+        _buildTokenBadge(isPenalty),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: RegenCountdown(
+            lastRegenTime: widget.game.lastRegenTime,
+            currentTokens: widget.game.tokens,
+            style: AppTypography.bodyMedium.copyWith(
+              fontSize: 9,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ],
     );
+  }
+
+  Widget _buildStreakArea() {
+    // Streak 0 ise alanı ayırıyoruz ki simetri bozulmasın
+    if (widget.game.streak == 0) {
+      return const SizedBox(width: 40, height: 36);
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.local_fire_department_rounded,
+              color: AppColors.warning, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            "x${widget.game.streak}",
+            style: AppTypography.labelSmall.copyWith(
+              color: AppColors.warning,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn().scale(begin: const Offset(0.8, 0.8));
   }
 
   Widget _buildTokenBadge(bool isPenalty) {
@@ -135,64 +234,66 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
       alignment: Alignment.centerLeft,
       clipBehavior: Clip.none,
       children: [
-        // --- KRİTİK ÇÖZÜM: GÖRÜNMEZ SABİT KEY HEDEFİ ---
-        // Bu kutu asla animasyona girmez, bu yüzden "Multiple Key" hatası vermez.
-        // Coin parçacıkları hala bu konumu hedef alır.
+        // Tutorial parmağı burayı hedef alır
         SizedBox(
           key: widget.tokenKey,
-          width: 100, // 80'den 120'ye çıkarıldı
-          height: 45, // 30'dan 45'e çıkarıldı
+          width: 85,
+          height: 36,
         ),
 
-        // --- LOKAL COIN PARÇACIKLARI ---
+        // Coin Parçacıkları
         if (_showParticles)
-          ...List.generate(12, (index) {
+          ...List.generate(6, (index) {
             return Positioned(
               left: 10,
-              child: const Text("🪙", style: TextStyle(fontSize: 16))
+              child: const Text("🪙", style: TextStyle(fontSize: 14))
                   .animate(key: ValueKey("cp_${widget.game.rewardTrigger}_$index"))
                   .fadeIn(duration: 200.ms)
                   .move(
-                begin: Offset(-60 - (index * 10), -20 + (index * 5)),
+                begin: Offset(-30 - (index * 6), -10 + (index * 3)),
                 end: Offset.zero,
-                duration: (600 + (index * 70)).ms,
+                duration: (500 + (index * 40)).ms,
                 curve: Curves.easeOutQuint,
               )
-                  .scale(begin: const Offset(0.4, 0.4), end: const Offset(1, 1))
-                  .fadeOut(delay: 500.ms),
+                  .fadeOut(delay: 300.ms),
             );
           }),
 
-        // --- GÖRSEL TOKEN KUTUSU (Key İçermez) ---
+        // Görsel Token Kutusu
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.black26,
-            borderRadius: BorderRadius.circular(20),
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
             border: Border.all(
-              color: isPenalty ? Colors.redAccent : Colors.amber.withValues(alpha:0.3),
+              color: isPenalty ? AppColors.error : AppColors.border,
               width: 1.5,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("🪙", style: TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
+              const Text("🪙", style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 6),
               Text(
-                "$_displayTokens",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+                formatTokenCount(_displayTokens),
+                style: AppTypography.bodyLarge.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: isPenalty ? AppColors.error : AppColors.primary,
+                ),
               ),
             ],
           ),
         )
-        // Animasyonlar Container'a uygulanır ama Key üstteki statik SizedBox'tadır.
             .animate(target: isPenalty ? 1 : 0)
-            .shake(hz: 8, duration: 400.ms)
-            .tint(color: Colors.red, end: 0.2, duration: 150.ms)
+            .shake(hz: 6, duration: 400.ms)
             .animate(target: _showParticles ? 1 : 0)
-            .scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1), duration: 300.ms, curve: Curves.easeOutBack)
-            .tint(color: Colors.amber, end: 0.1, duration: 300.ms),
+            .scale(
+            begin: const Offset(1, 1),
+            end: const Offset(1.05, 1.05),
+            duration: 200.ms)
+            .tint(color: AppColors.primary, end: 0.1),
       ],
     );
   }

@@ -1,28 +1,34 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/services.dart';import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+// Core & Data
 import '../../../core/app_constants.dart';
+import '../../../../data/categories.dart';
+
+// Tutorial
 import '../../tutorial/models/tutorial_state.dart';
 import '../../tutorial/providers/tutorial_provider.dart';
+
+// Game Feature
 import '../models/game_state.dart';
-import '../../../../data/categories.dart';
 import '../services/ad_service.dart';
 import '../services/reward_calculator.dart';
 import '../repository/game_repository.dart';
-
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 
 final gameRepositoryProvider = Provider((ref) => GameRepository());
 final adServiceProvider = Provider((ref) => AdService());
 
 class GameNotifier extends StateNotifier<GameState> {
   final GameRepository _repository;
-  static const String _storageKey = 'lexmory_save_game';
   final AdService _adService;
-  Timer? _regenTimer;
   final Ref _ref;
+
+  static const String _storageKey = 'lexmory_save_game';
+  Timer? _regenTimer;
 
   GameNotifier(this._repository, this._adService, this._ref) : super(_createPlaceholderState()) {
     _init();
@@ -34,7 +40,7 @@ class GameNotifier extends StateNotifier<GameState> {
     _startRegenTimer();
   }
 
-  // --- TOKEN REGENERATION LOGIC ---
+  // --- TOKEN REGENERATION ---
   void _checkOfflineRegeneration() {
     if (state.tokens >= 100) return;
     final now = DateTime.now();
@@ -73,30 +79,30 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   void _checkTokenStatus() {
-    if (state.tokens < 5) {
+    if (state.tokens < 5 && !state.showOutOfTokensPanel) {
       state = state.copyWith(showOutOfTokensPanel: true, isOutOfTokensDismissible: false);
       _persist();
     }
   }
 
+  // --- AD SERVICES ---
   Future<void> watchAdForTokens() async {
     final bool success = await _adService.showRewardedAd();
 
     if (success) {
-      // Eğer pasif bir durumda (joker tıklamadan) reklam izlendiyse
-      // veya miktar 0 ise default olarak 50 verelim.
       int rewardAmount = state.pendingAdReward > 0 ? state.pendingAdReward : 50;
 
       state = state.copyWith(
         tokens: state.tokens + rewardAmount,
         showOutOfTokensPanel: false,
-        pendingAdReward: 0, // Ödül alındı, sıfırla
+        pendingAdReward: 0,
+        rewardTrigger: state.rewardTrigger + 1,
       );
       _persist();
     }
   }
 
-  // --- STATE INITIALIZATION ---
+  // --- STATE PERSISTENCE ---
   static GameState _createPlaceholderState() {
     return GameState(
       category: "", targetWord: "", gridLetters: [], selectedIndices: [],
@@ -119,7 +125,7 @@ class GameNotifier extends StateNotifier<GameState> {
     if (!isTutorialCompleted) {
       state = _buildStateForWord(
         word: "ELMA",
-        category: "Meyveler", // Kategori güncellendi
+        category: "Meyveler",
         tokens: 300,
         completedCats: [],
         wordIdx: 0,
@@ -132,7 +138,6 @@ class GameNotifier extends StateNotifier<GameState> {
       try {
         state = GameState.fromJson(jsonDecode(savedData));
         _checkOfflineRegeneration();
-        _checkTokenStatus();
       } catch (e) {
         state = _createInitialState(_repository);
       }
@@ -148,7 +153,6 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   static GameState _createInitialState(GameRepository repository, {int? existingTokens, DateTime? lastRegen}) {
-// getRandomCategory yerine getNextCategory([]) kullanıyoruz (Henüz tamamlanan yok)
     final selectedCatData = repository.getNextCategory([]);
     final String catName = selectedCatData['category'] as String;
     final List<String> words = repository.getWordsForCategory(selectedCatData);
@@ -174,97 +178,52 @@ class GameNotifier extends StateNotifier<GameState> {
 
     final tut = _ref.read(tutorialProvider);
 
-    // --- KRİTİK DÜZELTME ---
-    // 1. Eğer zorunlu Joker Onboarding (Harf Aç + Yanlış Sil) zaten bittiyse
-    // bir daha asla bu bloğa girme.
-    if (tut.hintJokerTutorialCompleted && tut.removeJokerTutorialCompleted) {
-      return;
-    }
-
-    // 2. Eğer şu an halihazırda bir tutorial adımı aktifse (bekleme süresindeysek vs.)
-    // BULDUM butonu tanıtımı baştan başlatmasın.
-    if (tut.isTutorialActive) {
-      return;
-    }
-
-    // 3. Sadece phase contextual olduğunda (ELMA bittikten sonraki ilk gerçek oyun)
-    // ve daha önce hiç gösterilmediyse tetikle.
+    // BULDUM butonuna bastıktan 1 saniye sonra Tekrar (Reveal) Tanıtımı başlar
     if (tut.phase == TutorialPhase.contextual &&
-        !tut.hintClearTutorialShown &&
+        tut.hintClearTutorialShown &&
+        !tut.revealTutorialShown &&
+        !tut.isTutorialActive &&
         state.category != "Meyveler") {
-
-      // Bu metod zaten TutorialController içinde forcedHint adımını başlatıyor.
-      _ref.read(tutorialProvider.notifier).showJokerOnboarding();
+      _ref.read(tutorialProvider.notifier).startForcedRevealOnboarding();
     }
   }
 
-  void closeOutOfTokensPanel() {
-    state = state.copyWith(showOutOfTokensPanel: false);
-    _persist();
-  }
-
-  void selectLetter(int index) {
-    // Sadece zorunlu eğitim adımlarında kilit varsa durdur (Opsiyonel)
+  void selectLetter(int index) async {
     if (state.tutorialLock) return;
-
     final tutorialState = _ref.read(tutorialProvider);
 
     if (tutorialState.isTutorialActive) {
-      // --- FAZ 2: SERBEST DENEYİM ---
-      if (tutorialState.phase == TutorialPhase.phase2) {
-        if (state.isInitialReveal || state.selectedIndices.contains(index) || !state.hasStarted) return;
+      final tappedLetter = state.gridLetters[index];
+      final nextTargetIndex = state.foundLetters.indexOf(null);
 
-        final tappedLetter = state.gridLetters[index];
-        final nextTargetIndex = state.foundLetters.indexOf(null);
+      if (nextTargetIndex != -1) {
+        final expectedLetter = state.targetWord[nextTargetIndex];
 
-        if (nextTargetIndex != -1) {
-          final expectedLetter = state.targetWord[nextTargetIndex];
+        if (tappedLetter == expectedLetter) {
+          _handleCorrectSelection(index, nextTargetIndex, tappedLetter);
 
-          if (tappedLetter == expectedLetter) {
-            // ANINDA İŞLE
-            _handleCorrectSelection(index, nextTargetIndex, tappedLetter);
+          if (tutorialState.currentStep == TutorialStep.findingLetters ||
+              tutorialState.currentStep == TutorialStep.phase2Play) {
 
-            final List<String?> checkList = [...state.foundLetters];
-            checkList[nextTargetIndex] = tappedLetter;
+            final isWordFinished = !state.foundLetters.contains(null);
 
-            if (!checkList.contains(null)) {
-              // Kelime bittiğinde çıkan popup için makul bir bekleme (Sadece burada bekleme kalsın)
+            if (isWordFinished) {
               Future.delayed(const Duration(milliseconds: 1500), () {
                 if (mounted) _ref.read(tutorialProvider.notifier).nextStep();
               });
-            }
-          } else {
-            HapticFeedback.lightImpact();
-          }
-        }
-        return;
-      }
-
-      // --- FAZ 1: YÖNLENDİRMELİ EĞİTİM ---
-      if (tutorialState.currentStep == TutorialStep.findingLetters) {
-        final tappedLetter = state.gridLetters[index];
-        final nextTargetIndex = state.foundLetters.indexOf(null);
-
-        if (nextTargetIndex != -1) {
-          final expectedLetter = state.targetWord[nextTargetIndex];
-          if (tappedLetter == expectedLetter) {
-            _handleCorrectSelection(index, nextTargetIndex, tappedLetter);
-
-            final List<String?> checkList = [...state.foundLetters];
-            checkList[nextTargetIndex] = tappedLetter;
-
-            if (!checkList.contains(null)) {
-              Future.delayed(const Duration(milliseconds: 2000), () {
-                if (mounted) _ref.read(tutorialProvider.notifier).nextStep();
-              });
+            } else {
+              if (tutorialState.phase != TutorialPhase.phase2) {
+                _ref.read(tutorialProvider.notifier).handleLetterSuccessFlow();
+              }
             }
           }
+        } else {
+          HapticFeedback.lightImpact();
         }
       }
       return;
     }
 
-    // --- NORMAL OYUN MANTIĞI (TAMAMEN ANLIK) ---
     if (state.isInitialReveal || state.selectedIndices.contains(index) || !state.hasStarted) return;
 
     final tappedLetter = state.gridLetters[index];
@@ -273,49 +232,48 @@ class GameNotifier extends StateNotifier<GameState> {
     if (nextTargetIndex == -1) return;
 
     if (tappedLetter == state.targetWord[nextTargetIndex]) {
-      // Bekleme yok, kilit yok.
       _handleCorrectSelection(index, nextTargetIndex, tappedLetter);
     } else {
       _handleWrongSelection(index);
     }
   }
 
-// lib/features/game/providers/game_provider.dart
-
   void _handleCorrectSelection(int gridIdx, int targetIdx, String letter) {
-    // 1. Listeyi hemen kopyala ve güncelle
     final newFound = List<String?>.from(state.foundLetters);
     newFound[targetIdx] = letter;
 
-    // 2. State'i tek seferde, kilit koymadan güncelle
-    // tutorialLock her zaman false kalıyor, böylece input hiç kesilmiyor.
     state = state.copyWith(
-      tutorialLock: false,
       lastAttemptIndex: gridIdx,
       isLastAttemptCorrect: true,
-      justFoundIndex: targetIdx, // UI'daki pulse efektini tetikler
+      justFoundIndex: targetIdx,
       selectedIndices: [...state.selectedIndices, gridIdx],
       foundLetters: newFound,
     );
 
-    // Veriyi kaydet
     _persist();
 
-    // 3. Bölüm bitti mi kontrol et
     if (!newFound.contains(null)) {
       _handleWordVictory();
     }
   }
 
   void _handleWrongSelection(int gridIdx) async {
+    final tut = _ref.read(tutorialProvider);
+    // KRİTİK DEĞİŞİKLİK: Eğer token tanıtımı henüz gösterilmediyse ve
+    // eğitim kategorisinde değilsek (Gerçek oyunun ilk hatasıysa) token düşme.
+    final bool isFirstRealError = !tut.tokenTutorialShown && state.category != "Meyveler";
+    final int tokenDeduction = isFirstRealError ? 0 : 5;
+
     HapticFeedback.mediumImpact();
+
     state = state.copyWith(
-      tokens: max(0, state.tokens - 5),
+      // Sadece tanıtım yapıldıysa 5 token eksiltir
+      tokens: max(0, state.tokens - tokenDeduction),
       lastAttemptIndex: gridIdx,
       isLastAttemptCorrect: false,
       wrongAttemptsCount: state.wrongAttemptsCount + 1,
       totalCategoryWrongCount: state.totalCategoryWrongCount + 1,
-      streak: 0,
+      streak: 0, // Hata yapınca seri her zaman bozulur
     );
 
     _checkTokenStatus();
@@ -325,15 +283,12 @@ class GameNotifier extends StateNotifier<GameState> {
       state = state.copyWith(lastAttemptIndex: null, isLastAttemptCorrect: null);
     }
 
-    // Token Tanıtımı: İlk yanlışta
-    final tut = _ref.read(tutorialProvider);
+    // Token Tanıtımı: İlk yanlışta tetiklenir
     if (tut.hintJokerTutorialCompleted &&
-        tut.removeJokerTutorialCompleted &&
-        tut.revealTutorialShown &&
         !tut.tokenTutorialShown &&
         state.category != "Meyveler") {
 
-      // Oyuncunun hatayı görmesi için ek kısa bir bekleme
+      // Oyuncunun hatayı görmesi için kısa bir bekleme
       await Future.delayed(const Duration(milliseconds: 400));
 
       if (mounted) {
@@ -343,23 +298,13 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   void _handleWordVictory() async {
-    final tut = _ref.read(tutorialProvider);
-    // Kategori ismine bakmak yerine tutorial'ın aktif olup olmadığına bakıyoruz
-    if (tut.isTutorialActive) {
-      return;
-    }
+    if (_ref.read(tutorialProvider).isTutorialActive) return;
 
     int currentStreak = state.streak;
-
-    bool isPerfectView = state.wrongAttemptsCount == 0 && state.jokersUsedCount == 0;
-
-    if (isPerfectView) {
-      // Hiç hata yok, hiç joker yok -> Seri artar
+    bool isPerfect = state.wrongAttemptsCount == 0 && state.jokersUsedCount == 0;
+    if (isPerfect) {
       currentStreak += 1;
     } else {
-      // Hata VEYA joker varsa -> Seri bozulur (sıfırlanır)
-      // Eğer serinin sadece hatada bozulmasını istiyorsan burayı eski halinde bırakabilirsin.
-      // Ama joker kullanımı "Perfect" seri mantığına aykırıdır.
       currentStreak = 0;
     }
 
@@ -376,35 +321,19 @@ class GameNotifier extends StateNotifier<GameState> {
     final List<String> words = _repository.getWordsForCategory(currentCatData);
     bool isCategoryLastWord = state.currentWordIndex + 1 >= words.length;
 
-    await Future.delayed(const Duration(milliseconds: 1500));
+    await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted) return;
 
     if (isCategoryLastWord) {
-      final remainingCats = categories.where((c) =>
-      !state.completedCategories.contains(c['category']) &&
-          c['category'] != state.category).toList();
-
-      if (remainingCats.isEmpty) {
-        state = state.copyWith(
-          tokens: state.tokens + reward.total + 150,
-          showGameFinishedPanel: true,
-          showCategoryCompletePanel: false,
-          completedCategories: [...state.completedCategories, state.category],
-          lastCompletedCategory: state.category,
-          streak: currentStreak,
-          totalSolvedWords: newTotalSolved,
-          totalEarnedTokens: newTotalEarned + 150,
-        );
-      } else {
-        state = state.copyWith(
-          tokens: state.tokens + reward.total + 150,
-          showCategoryCompletePanel: true,
-          lastCompletedCategory: state.category,
-          streak: currentStreak,
-          totalSolvedWords: newTotalSolved,
-          totalEarnedTokens: newTotalEarned + 150,
-        );
-      }
+      state = state.copyWith(
+        tokens: state.tokens + reward.total + 150,
+        showCategoryCompletePanel: true,
+        lastCompletedCategory: state.category,
+        streak: currentStreak,
+        totalSolvedWords: newTotalSolved,
+        totalEarnedTokens: newTotalEarned + 150,
+        completedCategories: [...state.completedCategories, state.category],
+      );
       _persist();
     } else {
       state = state.copyWith(
@@ -422,16 +351,159 @@ class GameNotifier extends StateNotifier<GameState> {
       if (!mounted) return;
       state = state.copyWith(showVictoryPanel: false);
       _loadNextWord();
+    }
+  }
+
+  // --- JOKERS ---
+  // --- HARF AÇ JOKERİ ---
+  Future<void> useHint() async {
+    if (state.tutorialLock) return;
+    final tutorialController = _ref.read(tutorialProvider.notifier);
+    final tutorialState = _ref.read(tutorialProvider);
+    final bool isForced = tutorialState.currentStep == TutorialStep.forcedHint;
+
+    // Koruma: Tutorial aktifse ve doğru adımda değilsek işlem yapma
+    if (tutorialState.isTutorialActive && !isForced) return;
+
+    final bool isFree = isForced || (!tutorialState.freeHintUsed && state.category != "Meyveler");
+    final int cost = isFree ? 0 : 80;
+
+    if (state.tokens < cost) {
+      _showOutOfTokensForJoker(cost);
+      return;
+    }
+
+    final nextTargetIndex = state.foundLetters.indexOf(null);
+    if (nextTargetIndex == -1) return;
+
+    final char = state.targetWord[nextTargetIndex];
+    int gridIdx = -1;
+    for (int i = 0; i < state.gridLetters.length; i++) {
+      if (state.gridLetters[i] == char && !state.selectedIndices.contains(i)) {
+        gridIdx = i;
+        break;
+      }
+    }
+
+    if (gridIdx != -1) {
+      if (isForced) {
+        // 1. Karartmayı anında kaldır (Harf animasyonu net görünsün)
+        tutorialController.completeJokerStep('hint_joker_tutorial_completed');
+      }
+
+      // 2. Harf animasyonunu başlat
+      state = state.copyWith(lastAttemptIndex: gridIdx, isLastAttemptCorrect: true);
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      _handleCorrectSelection(gridIdx, nextTargetIndex, char);
+
+      // 3. Token ve Sayaç güncelle
+      state = state.copyWith(
+        tokens: state.tokens - cost,
+        jokersUsedCount: state.jokersUsedCount + 1,
+        totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
+      );
+
+      if (isForced) {
+        // 4. Harf yerleşti, 1.5 saniye bekle ve Yanlış Sil'e geç (Gecikme tutorial_provider'da)
+        await tutorialController.nextStepWithDelay(animationDuration: Duration.zero);
+      }
       _persist();
     }
   }
 
+  Future<void> clearWrong() async {
+    final tutorialController = _ref.read(tutorialProvider.notifier);
+    final tutorialState = _ref.read(tutorialProvider);
+    final bool isForced = tutorialState.currentStep == TutorialStep.forcedClear;
+
+    if (tutorialState.isTutorialActive && !isForced) return;
+
+    final bool isFree = isForced || (!tutorialState.removeJokerTutorialCompleted && state.category != "Meyveler");
+    final int cost = isFree ? 0 : 60;
+
+    if (state.tokens < cost) {
+      _showOutOfTokensForJoker(cost);
+      return;
+    }
+
+    List<int> toEliminate = [];
+    for (int i = 0; i < state.gridLetters.length; i++) {
+      if (!state.targetWord.contains(state.gridLetters[i]) && !state.eliminatedIndices.contains(i)) {
+        toEliminate.add(i);
+      }
+      if (toEliminate.length >= 3) break;
+    }
+
+    if (toEliminate.isNotEmpty) {
+      if (isForced) {
+        // Spotlight'ı kapat
+        tutorialController.completeJokerStep('remove_joker_tutorial_completed');
+      }
+
+      state = state.copyWith(
+        tokens: state.tokens - cost,
+        eliminatedIndices: [...state.eliminatedIndices, ...toEliminate],
+        jokersUsedCount: state.jokersUsedCount + 1,
+        totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
+      );
+
+      if (isForced) {
+        // Harfler silindi, tutorial_provider 1 saniye bekleyip tutorial'ı sonlandıracak
+        await tutorialController.nextStepWithDelay(animationDuration: const Duration(milliseconds: 1000));
+      }
+      _persist();
+    }
+  }
+
+  Future<void> showAgain() async {
+    final tutorialController = _ref.read(tutorialProvider.notifier);
+    final tutorialState = _ref.read(tutorialProvider);
+    final bool isForced = tutorialState.currentStep == TutorialStep.forcedReveal;
+
+    if (tutorialState.isTutorialActive && !isForced) return;
+
+    final bool isFree = isForced || (!tutorialState.freeRevealUsed && state.category != "Meyveler");
+    final int cost = isFree ? 0 : 40;
+
+    if (state.tokens < cost) {
+      _showOutOfTokensForJoker(cost);
+      return;
+    }
+
+    if (isForced) {
+      // Spotlight'ı kapat
+      tutorialController.completeJokerStep('reveal_tutorial_shown');
+    }
+
+    state = state.copyWith(
+      tokens: state.tokens - cost,
+      isInitialReveal: true,
+      jokersUsedCount: state.jokersUsedCount + 1,
+    );
+    _persist();
+
+    // Kartlar 4 saniye açık kalır
+    await Future.delayed(const Duration(seconds: 4));
+
+    if (mounted) {
+      state = state.copyWith(isInitialReveal: false);
+      _persist();
+
+      if (isForced) {
+        // Kartlar kapandı, 1 saniye bekle ve "Artık Hazırsın"a geç
+        await Future.delayed(const Duration(seconds: 1));
+        tutorialController.nextStep();
+      }
+    }
+  }
+
+  // --- HELPERS ---
   void _loadNextWord() {
     final currentCatData = _repository.getCategoryByName(state.category);
     final List<String> words = _repository.getWordsForCategory(currentCatData);
 
     if (state.currentWordIndex + 1 < words.length) {
-      // AYNI KATEGORİDE SIRADAKİ KELİMEYE GEÇ
       state = _buildStateForWord(
         word: words[state.currentWordIndex + 1],
         category: state.category,
@@ -439,16 +511,12 @@ class GameNotifier extends StateNotifier<GameState> {
         completedCats: state.completedCategories,
         wordIdx: state.currentWordIndex + 1,
         streak: state.streak,
-        totalWrong: state.totalCategoryWrongCount,
-        totalJokers: state.totalCategoryJokersCount,
-        rewardTrigger: state.rewardTrigger,
         solvedWords: state.totalSolvedWords,
         earnedTokens: state.totalEarnedTokens,
         lastRegen: state.lastRegenTime,
       );
     } else {
       final currentCompleted = [...state.completedCategories, state.category];
-
       final nextCatData = _repository.getNextCategory(currentCompleted);
 
       state = _buildStateForWord(
@@ -458,7 +526,6 @@ class GameNotifier extends StateNotifier<GameState> {
         completedCats: currentCompleted,
         wordIdx: 0,
         streak: state.streak,
-        rewardTrigger: state.rewardTrigger,
         solvedWords: state.totalSolvedWords,
         earnedTokens: state.totalEarnedTokens,
         lastRegen: state.lastRegenTime,
@@ -467,240 +534,36 @@ class GameNotifier extends StateNotifier<GameState> {
     _persist();
   }
 
+  void _showOutOfTokensForJoker(int amount) {
+    state = state.copyWith(showOutOfTokensPanel: true, isOutOfTokensDismissible: true, pendingAdReward: amount);
+    _persist();
+  }
+
+  void closeOutOfTokensPanel() {
+    state = state.copyWith(showOutOfTokensPanel: false);
+    _persist();
+  }
+
+  void startNextCategory() {
+    state = state.copyWith(showCategoryCompletePanel: false, totalCategoryWrongCount: 0, totalCategoryJokersCount: 0);
+    _loadNextWord();
+  }
+
   void resetGame() {
-    state = _createInitialState(
-        _repository,
-        existingTokens: state.tokens,
-        lastRegen: state.lastRegenTime
-    );
+    state = _createInitialState(_repository, existingTokens: state.tokens, lastRegen: state.lastRegenTime);
     _persist();
   }
 
   void resetGameForTutorial() {
-    state = _buildStateForWord(
-      word: "ELMA",
-      category: "Meyveler",
-      tokens: 300,
-      completedCats: [],
-      wordIdx: 0,
-    );
-    _persist();
-  }
-
-// --- HARF AÇ JOKERİ ---
-  Future<void> useHint() async {
-    if (state.tutorialLock) return;
-    final tutorialController = _ref.read(tutorialProvider.notifier);
-    final tutorialState = _ref.read(tutorialProvider);
-
-    final bool isForcedStep = tutorialState.currentStep == TutorialStep.forcedHint;
-
-    // Koruma: Tutorial aktifse ve doğru adımda değilsek işlem yapma
-    if (tutorialState.isTutorialActive && tutorialState.phase != TutorialPhase.contextual) return;
-    if (tutorialState.isTutorialActive && !isForcedStep) return;
-
-    final bool isFree = isForcedStep || (!tutorialState.freeHintUsed && state.category != "Meyveler");
-    final int cost = isFree ? 0 : 80;
-
-    if (state.tokens < cost) {
-      _showOutOfTokensForJoker(cost); // cost burada 80'dir
-      return;
-    }
-
-    final nextTargetIndex = state.foundLetters.indexOf(null);
-    if (nextTargetIndex == -1) return;
-
-    final char = state.targetWord[nextTargetIndex];
-    int gridIdx = -1;
-
-    // Grid içinde harfin yerini bul
-    for (int i = 0; i < state.gridLetters.length; i++) {
-      if (state.gridLetters[i] == char && !state.selectedIndices.contains(i)) {
-        gridIdx = i;
-        break;
-      }
-    }
-
-    if (gridIdx != -1) {
-      if (isForcedStep) {
-        // --- TUTORIAL AKIŞI ---
-        // 1. Overlay'i anında kapat
-        tutorialController.completeJokerStep('hint_joker_tutorial_completed');
-
-        // 2. Kart Dönme Animasyonu Beklemesi (Görsel feedback için)
-        state = state.copyWith(lastAttemptIndex: gridIdx, isLastAttemptCorrect: true);
-        await Future.delayed(const Duration(milliseconds: 800));
-
-        // 3. Harfi anında yerleştir (HandleCorrectSelection artık void olduğu için await yok)
-        _handleCorrectSelection(gridIdx, nextTargetIndex, char);
-
-        // Tutorial bir sonraki adıma (Yanlış Sil) geçsin
-        await tutorialController.nextStepWithDelay(
-          animationDuration: Duration.zero,
-        );
-      } else {
-        // --- NORMAL OYUN AKIŞI ---
-        state = state.copyWith(lastAttemptIndex: gridIdx, isLastAttemptCorrect: true);
-        await Future.delayed(const Duration(milliseconds: 800));
-
-        // Harfi anında yerleştir
-        _handleCorrectSelection(gridIdx, nextTargetIndex, char);
-      }
-
-      // --- KRİTİK SAYAÇ GÜNCELLEMELERİ ---
-      // Bu kısım RewardCalculator'ın joker kullanıldığını anlamasını sağlar
-      state = state.copyWith(
-        tokens: state.tokens - cost,
-        jokersUsedCount: state.jokersUsedCount + 1, // Ödül panelinde bonusu düşürür
-        totalCategoryJokersCount: state.totalCategoryJokersCount + 1, // İstatistikler için
-      );
-
-      if (isFree && !isForcedStep) {
-        tutorialController.markFlag('free_hint_used');
-      }
-
-      _persist();
-      _checkTokenStatus();
-    }
-  }
-
-// --- YANLIŞ SİL JOKERİ ---
-  Future<void> clearWrong() async {
-    // State'i en güncel haliyle almak için notifier'ı okuyoruz
-    final tutorialController = _ref.read(tutorialProvider.notifier);
-    final tutorialState = _ref.read(tutorialProvider);
-
-    // Bu işlemin bir tutorial adımı olup olmadığını metodun başında mühürlüyoruz
-    final bool isForcedStep = tutorialState.currentStep == TutorialStep.forcedClear;
-
-    // Guard: Tutorial aktifse ve bu bizim beklediğimiz adım değilse işlem yapma
-    if (tutorialState.removeJokerTutorialCompleted && isForcedStep) return;
-    if (tutorialState.isTutorialActive && !isForcedStep) return;
-
-    final bool isFree = isForcedStep || (!tutorialState.removeJokerTutorialCompleted && state.category != "Meyveler");
-    final int cost = isFree ? 0 : 60;
-
-    if (state.tokens < cost) {
-      _showOutOfTokensForJoker(cost); // cost burada 60'tır
-      return;
-    }
-
-    // Silinecek yanlış harfleri bul
-    List<int> toEliminate = [];
-    for (int i = 0; i < state.gridLetters.length; i++) {
-      if (!state.targetWord.contains(state.gridLetters[i]) &&
-          !state.eliminatedIndices.contains(i)) {
-        toEliminate.add(i);
-      }
-      if (toEliminate.length >= 3) break;
-    }
-
-    if (toEliminate.isNotEmpty) {
-      if (isForcedStep) {
-        // 1. Bayrağı işaretle ve spotlight'ı kapat
-        tutorialController.completeJokerStep('remove_joker_tutorial_completed');
-
-        // 2. Harfleri sil
-        state = state.copyWith(
-          tokens: state.tokens - 0, // Ücretsiz
-          eliminatedIndices: [...state.eliminatedIndices, ...toEliminate],
-          jokersUsedCount: state.jokersUsedCount + 1,
-        );
-
-        // 3. Efekti gör (Animasyon) ve 3-5 saniye bekle, sonra tamamen kapat
-        await tutorialController.nextStepWithDelay(
-          animationDuration: const Duration(milliseconds: 1000),
-        );
-      } else {
-        // NORMAL OYUN AKIŞI
-        state = state.copyWith(
-          tokens: state.tokens - cost,
-          eliminatedIndices: [...state.eliminatedIndices, ...toEliminate],
-          jokersUsedCount: state.jokersUsedCount + 1,
-          totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
-        );
-      }
-
-      _persist();
-      _checkTokenStatus();
-    }
-  }
-
-  Future<void> showAgain() async {
-    final tutorialController = _ref.read(tutorialProvider.notifier);
-    final tutorialState = _ref.read(tutorialProvider);
-
-    // Zorunlu adım mühürleme
-    final bool isForcedStep = tutorialState.currentStep == TutorialStep.forcedReveal;
-
-    // Koruma
-    if (tutorialState.isTutorialActive && !isForcedStep) return;
-
-    final bool isFree = isForcedStep || (!tutorialState.freeRevealUsed && state.category != "Meyveler");
-    final int cost = isFree ? 0 : 40;
-
-    if (state.tokens < cost) {
-      _showOutOfTokensForJoker(cost); // cost burada 40'tır
-      return;
-    }
-
-    if (isForcedStep) {
-      // 1. ANINDA SPOTLIGHT'I KAPAT
-      // completeJokerStep metoduna 'reveal_joker_tutorial_completed' gönderin
-      tutorialController.completeJokerStep('reveal_tutorial_shown');
-
-    }
-
-    // 2. KARTLARI AÇ (Animasyon başlar)
-    state = state.copyWith(
-      tokens: state.tokens - cost,
-      isInitialReveal: true,
-      jokersUsedCount: state.jokersUsedCount + 1,
-    );
-
-    if (isFree && !isForcedStep) {
-      tutorialController.markFlag('free_reveal_used');
-    }
-    _persist();
-
-    // 3. KARTLARIN AÇIK KALMA SÜRESİNİ BEKLE (4 Saniye)
-    await Future.delayed(const Duration(seconds: 4));
-
-    if (mounted) {
-      state = state.copyWith(isInitialReveal: false);
-      _persist();
-
-      // 4. EĞİTİM ADIMINDAYSAK FİNAL EKRANINA GEÇ
-      if (isForcedStep) {
-        // Oyuncunun kartların kapandığını görmesi için 1 sn ek bekleme
-        await Future.delayed(const Duration(seconds: 1));
-        tutorialController.nextStep(); // TutorialStep.completed (Artık Hazırsın) ekranına gider
-      }
-    }
-  }
-
-  void _showOutOfTokensForJoker(int amount) {
-    state = state.copyWith(
-      showOutOfTokensPanel: true,
-      isOutOfTokensDismissible: true,
-      pendingAdReward: amount, // Hangi joker için açıldıysa o miktarı kaydet
-    );
+    state = _buildStateForWord(word: "ELMA", category: "Meyveler", tokens: 300, completedCats: [], wordIdx: 0);
     _persist();
   }
 
   static GameState _buildStateForWord({
-    required String word,
-    required String category,
-    required int tokens,
-    required List<String> completedCats,
-    required int wordIdx,
-    int streak = 0,
-    int totalWrong = 0,
-    int totalJokers = 0,
-    int rewardTrigger = 0,
-    int solvedWords = 0,
-    int earnedTokens = 0,
-    DateTime? lastRegen,
+    required String word, required String category, required int tokens,
+    required List<String> completedCats, required int wordIdx,
+    int streak = 0, int totalWrong = 0, int totalJokers = 0,
+    int rewardTrigger = 0, int solvedWords = 0, int earnedTokens = 0, DateTime? lastRegen,
   }) {
     const alphabet = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ";
     final List<String> letters = word.toUpperCase().split('');
@@ -713,16 +576,11 @@ class GameNotifier extends StateNotifier<GameState> {
     letters.shuffle();
 
     final Set<int> hintIndices = {};
-    final bool isTutorialWord = category == "Meyveler" && word.toUpperCase() == "ELMA";
-    if (isTutorialWord) {
-      // Sabit İpucu: E _ M _ (1. ve 3. harfler açık)
+    if (category == "Meyveler" && word.toUpperCase() == "ELMA") {
       hintIndices.addAll([0, 2]);
-    }
-    else{
+    } else {
       final int hintCount = word.length > 8 ? 3 : (word.length > 5 ? 2 : 1);
-      while (hintIndices.length < hintCount) {
-        hintIndices.add(random.nextInt(word.length));
-      }
+      while (hintIndices.length < hintCount) hintIndices.add(random.nextInt(word.length));
     }
 
     final List<String?> initialFound = List.filled(word.length, null);
@@ -740,30 +598,18 @@ class GameNotifier extends StateNotifier<GameState> {
     }
 
     return GameState(
-      category: category, targetWord: word.toUpperCase(),
-      gridLetters: letters, selectedIndices: selectedGridIndices,
-      foundLetters: initialFound, isInitialReveal: true,
-      hasStarted: false, tokens: tokens,
+      category: category, targetWord: word.toUpperCase(), gridLetters: letters,
+      selectedIndices: selectedGridIndices, foundLetters: initialFound,
+      isInitialReveal: true, hasStarted: false, tokens: tokens,
       completedCategories: completedCats, currentWordIndex: wordIdx,
-      eliminatedIndices: [], showVictoryPanel: false,
-      showGameFinishedPanel: false, totalSolvedWords: solvedWords,
-      lastRewardTotal: 0, wrongAttemptsCount: 0, jokersUsedCount: 0,
-      streak: streak, showCategoryCompletePanel: false,
+      eliminatedIndices: [], showVictoryPanel: false, showGameFinishedPanel: false,
+      totalSolvedWords: solvedWords, lastRewardTotal: 0, wrongAttemptsCount: 0,
+      jokersUsedCount: 0, streak: streak, showCategoryCompletePanel: false,
       lastCompletedCategory: null, totalCategoryWrongCount: totalWrong,
       totalCategoryJokersCount: totalJokers, rewardTrigger: rewardTrigger,
       totalEarnedTokens: earnedTokens, showOutOfTokensPanel: false,
       isOutOfTokensDismissible: false, lastRegenTime: lastRegen ?? DateTime.now(),
     );
-  }
-
-  void startNextCategory() {
-    state = state.copyWith(
-      showCategoryCompletePanel: false,
-      rewardTrigger: state.rewardTrigger + 1,
-      totalCategoryWrongCount: 0,
-      totalCategoryJokersCount: 0,
-    );
-    _loadNextWord();
   }
 }
 

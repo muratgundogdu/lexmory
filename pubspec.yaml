@@ -29,9 +29,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "lib/assets/icon/lexmory_icon.png"
-  adaptive_icon_background: "#1A1A1A"
-  adaptive_icon_foreground: "lib/assets/icon/lexmory_icon.png"
+  image_path: "lib/assets/icon/app_icon.png"
+  adaptive_icon_background: "#0F0F10"
+  adaptive_icon_foreground: "lib/assets/icon/app_icon.png"
 
 flutter:
   uses-material-design: true
@@ -40,15 +40,18 @@ flutter:
   assets:
     - lib/assets/images/splash/splash.png
     - lib/assets/icon/lexmory_native_splash.png
+    - lib/assets/icon/native_splash.png
+    - lib/assets/images/splash/app_splash.png
+    - lib/assets/library/room_01
 
 flutter_native_splash:
-  color: "#050505"
-  image: lib/assets/icon/lexmory_native_splash.png
+  color: "#0F0F10"
+  image: lib/assets/icon/native_splash.png
 
   android_12:
-    color: "#050505"
-    image: lib/assets/icon/lexmory_native_splash.png
-    icon_background_color: "#050505"
+    color: "#0F0F10"
+    image: lib/assets/icon/native_splash.png
+    icon_background_color: "#0F0F10"
 
   android: true
   ios: true

@@ -1,198 +1,179 @@
-import 'dart:async';
-import 'dart:math' as math; // math kütüphanesini ekledik
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'game_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SplashScreen extends StatefulWidget {
+import '../../../core/app_colors.dart';
+import '../../../core/app_dimens.dart';
+import '../../../core/app_typography.dart';
+import '../../main/view/main_navigation_screen.dart';
+
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
-  final List<bool> _isRevealed = [false, false, false, false, false];
-  final List<String> _letters = ["L", "X", "M", "R", "Y"];
-
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FlutterNativeSplash.remove();
-    });
     _initApp();
   }
 
   Future<void> _initApp() async {
-    await Future.delayed(500.ms);
+    // Native splash ekranını hemen kaldırıyoruz
+    FlutterNativeSplash.remove();
 
-    for (int i = 0; i < _letters.length; i++) {
-      if (!mounted) return;
-      await Future.delayed(400.ms);
-      setState(() {
-        _isRevealed[i] = true;
-      });
-    }
+    // Toplam animasyon ve izleme süresi (6 saniye)
+    // 1.5sn başlangıç bekleme + (5 harf * 0.5sn) + 2sn son bekleme
+    await Future.delayed(const Duration(milliseconds: 6000));
 
-    await Future.delayed(1500.ms);
     if (!mounted) return;
 
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const GameScreen()),
+      MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final letters = ['L', 'X', 'M', 'R', 'Y'];
+
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: Stack(
-        fit: StackFit.expand,
         children: [
-          Image.asset(
-            "lib/assets/images/splash/splash.png",
-            fit: BoxFit.cover,
+          // 1. ARKA PLAN GÖRSELİ (Tam Ekran)
+          Positioned.fill(
+            child: Image.asset(
+              'lib/assets/images/splash/app_splash.png',
+              fit: BoxFit.cover,
+            ).animate().fadeIn(duration: 800.ms),
           ),
-          Container(
-            color: Colors.black.withValues(alpha:0.6),
+
+          // Karartma Katmanı
+          Positioned.fill(
+            child: Container(color: Colors.black.withValues(alpha: 0.5)),
           ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 80, top: 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(_letters.length, (index) {
-                            return _buildAnimatedTile(index);
-                          }),
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-                      Text(
-                        "YÜKLENİYOR...",
-                        style: GoogleFonts.poppins(
-                          color: Colors.white60,
-                          fontSize: 12,
-                          letterSpacing: 4,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      )
-                          .animate(onPlay: (c) => c.repeat())
-                          .shimmer(duration: 2.seconds, color: Colors.amber.withValues(alpha:0.4)),
-                    ],
-                  ),
+
+          // 2. 3D SIRALI HARFLER
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(flex: 5),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(letters.length, (index) {
+                    return _SplashLetterTile(
+                      letter: letters[index],
+                      // GECİKME: 1500ms (ilk bekleme) + her harf için 500ms artış
+                      delay: Duration(milliseconds: 1500 + (index * 500)),
+                    );
+                  }),
                 ),
-              ),
+                const Spacer(flex: 1),
+              ],
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildAnimatedTile(int index) {
-    bool revealed = _isRevealed[index];
-    String char = _letters[index];
-
-    return Container(
-      width: 50,
-      height: 62,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: revealed ? const Color(0xFF38473A) : const Color(0xFF2D2D2D),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: revealed ? Colors.greenAccent.withValues(alpha:0.6) : Colors.white24,
-          width: 2,
-        ),
-        boxShadow: revealed
-            ? [
-          BoxShadow(
-            color: Colors.greenAccent.withValues(alpha:0.2),
-            blurRadius: 12,
-            spreadRadius: 1,
-          )
-        ]
-            : [],
-      ),
-      alignment: Alignment.center,
-      child: AnimatedSwitcher(
-        duration: 300.ms,
-        // Harfin ters dönmemesi için switcher içinde sadece Fade kullanıyoruz
-        transitionBuilder: (Widget child, Animation<double> animation) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        child: Text(
-          revealed ? char : "?",
-          key: ValueKey<bool>(revealed),
-          style: GoogleFonts.baloo2(
-            color: revealed ? Colors.white : Colors.white38,
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    )
-        .animate(target: revealed ? 1 : 0)
-        .custom(
-      duration: 600.ms,
-      builder: (context, value, child) {
-        // Kartın dönüş açısı (0 - 180 derece)
-        final double angle = value * math.pi;
-
-        return Transform(
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.001)
-            ..rotateY(angle),
-          alignment: Alignment.center,
-          // KRİTİK DÜZELTME:
-          // Kart 90 dereceyi geçtiğinde (arka yüzü bize dönerken)
-          // içeriği tekrar 180 derece döndürüyoruz ki harf DÜZ görünsün.
-          child: angle > (math.pi / 2)
-              ? Transform(
-            transform: Matrix4.identity()..rotateY(math.pi),
-            alignment: Alignment.center,
-            child: child,
-          )
-              : child,
-        );
-      },
-    )
-        .shimmer(delay: 200.ms, duration: 400.ms);
-  }
 }
 
-// RotationYTransition sınıfı kullanılmıyor ancak kod yapısını bozmamak adına bırakılmıştır.
-class RotationYTransition extends AnimatedWidget {
-  const RotationYTransition({
-    super.key,
-    required Animation<double> turns,
-    this.child,
-  }) : super(listenable: turns);
+class _SplashLetterTile extends StatefulWidget {
+  final String letter;
+  final Duration delay;
 
-  Animation<double> get turns => listenable as Animation<double>;
-  final Widget? child;
+  const _SplashLetterTile({required this.letter, required this.delay});
+
+  @override
+  State<_SplashLetterTile> createState() => _SplashLetterTileState();
+}
+
+class _SplashLetterTileState extends State<_SplashLetterTile> {
+  bool _isFlipped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Kutunun dönmeye başlama anı
+    Future.delayed(widget.delay, () {
+      if (mounted) setState(() => _isFlipped = true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final double angle = turns.value * math.pi;
-    return Transform(
-      transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.001)
-        ..rotateY(angle),
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 1200),
+      curve: Curves.easeInOutBack,
+      tween: Tween<double>(begin: 0, end: _isFlipped ? pi : 0),
+      builder: (context, angle, child) {
+        // 90 dereceyi (pi/2) geçince harf, geçmeyince ? görünür
+        bool isPastHalf = angle > (pi / 2);
+
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.0015) // Premium 3D derinlik
+            ..rotateY(angle),
+          child: Transform(
+            alignment: Alignment.center,
+            // Ayna görüntüsünü engellemek için 90 dereceden sonra içeriği geri çevir
+            transform: isPastHalf
+                ? (Matrix4.identity()..rotateY(pi))
+                : Matrix4.identity(),
+            child: _buildCardUI(isPastHalf),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCardUI(bool isOpened) {
+    return Container(
+      width: 54,
+      height: 70,
+      margin: const EdgeInsets.symmetric(horizontal: 5),
       alignment: Alignment.center,
-      child: child,
+      decoration: BoxDecoration(
+        // Kapalıysa koyu gri/yüzey, açıksa hafif altın dolgulu yüzey
+        color: isOpened
+            ? AppColors.primary.withValues(alpha: 0.15)
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
+        border: Border.all(
+          color: isOpened ? AppColors.primary : AppColors.border,
+          width: isOpened ? 2.5 : 1.5,
+        ),
+        boxShadow: [
+          if (isOpened)
+            BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.3),
+                blurRadius: 15,
+                spreadRadius: 2
+            ),
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 10,
+              offset: const Offset(0, 4)
+          ),
+        ],
+      ),
+      child: Text(
+        isOpened ? widget.letter : "?",
+        style: AppTypography.displayLarge.copyWith(
+          fontSize: 28,
+          fontWeight: FontWeight.w900,
+          color: isOpened ? AppColors.textPrimary : AppColors.textMuted,
+        ),
+      ),
     );
   }
 }

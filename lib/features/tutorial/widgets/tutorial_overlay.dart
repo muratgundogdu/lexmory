@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
-
+import '../../../core/app_colors.dart';
+import '../../../core/app_dimens.dart';
+import '../../../core/app_typography.dart';
 import '../models/tutorial_state.dart';
 
 class TutorialOverlay extends StatefulWidget {
@@ -11,18 +12,18 @@ class TutorialOverlay extends StatefulWidget {
   final String buttonText;
   final VoidCallback onNext;
   final bool showButton;
-  final bool isInitialPhase; // <--- Bu satırı ekleyin
-  final TutorialStep? currentStep; // <--- Bu satırı ekleyin
+  final bool isInitialPhase;
+  final TutorialStep? currentStep;
 
   const TutorialOverlay({
     super.key,
     this.targetKey,
     required this.text,
-    this.buttonText = "DEVAM",
+    this.buttonText = "ANLADIM",
     required this.onNext,
     this.showButton = true,
-    this.isInitialPhase = false, // <--- Varsayılan olarak false yapın
-    this.currentStep, // <--- Constructor'a ekleyin
+    this.isInitialPhase = false,
+    this.currentStep,
   });
 
   @override
@@ -37,7 +38,8 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
   void initState() {
     super.initState();
     _updateRect();
-    _timer = Timer.periodic(300.ms, (_) => _updateRect());
+    // 100ms'de bir kontrol ederek çok daha akıcı bir takip sağlıyoruz
+    _timer = Timer.periodic(100.ms, (_) => _updateRect());
   }
 
   void _updateRect() {
@@ -46,7 +48,7 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
     if (box != null && box.hasSize) {
       final newRect = box.localToGlobal(Offset.zero) & box.size;
       if (newRect != _spotlightRect) {
-        setState(() => _spotlightRect = newRect);
+        if (mounted) setState(() => _spotlightRect = newRect);
       }
     }
   }
@@ -60,132 +62,158 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final rect = _spotlightRect ?? Rect.fromCenter(
-        center: Offset(size.width / 2, size.height / 2),
-        width: 0, height: 0
-    );
+
+    // Eğer hedef yoksa (geçiş anı) ekranın dışında küçük bir nokta oluşturur
+    final rect = _spotlightRect ?? Rect.fromLTWH(size.width / 2, size.height / 2, 0, 0);
 
     return Stack(
       children: [
-        // 1. Dinamik Spotlight Katmanı
-        TweenAnimationBuilder<Rect?>(
-          duration: 400.ms,
-          curve: Curves.easeInOut,
-          tween: RectTween(begin: rect, end: rect),
-          builder: (context, animRect, _) {
-            final r = animRect ?? Rect.zero;
-            return Stack(
-              children: [
-                Positioned(top: 0, left: 0, right: 0, height: r.top, child: _blackOverlay()),
-                Positioned(top: r.bottom, left: 0, right: 0, bottom: 0, child: _blackOverlay()),
-                Positioned(top: r.top, left: 0, width: r.left, height: r.height, child: _blackOverlay()),
-                Positioned(top: r.top, left: r.right, right: 0, height: r.height, child: _blackOverlay()),
+        // 1. GERÇEK SPOTLIGHT KATMANI (Tıklamayı engellemez)
+        IgnorePointer(
+          ignoring: true, // Alt katmandaki butonlara basmayı engellemez
+          child: TweenAnimationBuilder<Rect?>(
+            duration: 600.ms, // Kayma efekti süresi
+            curve: Curves.easeOutQuart,
+            tween: RectTween(begin: rect, end: rect),
+            builder: (context, animRect, _) {
+              return CustomPaint(
+                size: size,
+                painter: SpotlightPainter(
+                  rect: animRect ?? rect,
+                  shadowColor: Colors.black.withValues(alpha: 0.6), // %60 Karartma
+                ),
+              );
+            },
+          ),
+        ),
 
-                // Çerçeve
-                Positioned.fromRect(
-                  rect: r.inflate(4),
-                  child: IgnorePointer(
+        // Hedef Alan Çerçevesi (Görsel Yardımcı - Tıklamayı Engellemez)
+        IgnorePointer(
+          ignoring: true,
+          child: TweenAnimationBuilder<Rect?>(
+            duration: 600.ms,
+            curve: Curves.easeOutQuart,
+            tween: RectTween(begin: rect, end: rect),
+            builder: (context, animRect, _) {
+              final r = animRect ?? rect;
+              return Stack(
+                children: [
+                  Positioned.fromRect(
+                    rect: r.inflate(4),
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.amber.withValues(alpha:0.5), width: 2),
-                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary, width: 2),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
 
-        // 2. SABİTLENMİŞ BİLGİ KARTI (EN ALT)
-        _buildFixedBottomCard(context),
+        // 2. BİLGİ KARTI (Tıklanabilir)
+        _buildInfoCard(context),
       ],
     );
   }
 
-  Widget _blackOverlay() => Container(
-    color: Colors.black.withValues(alpha:0.8),
-    child: GestureDetector(onTap: () {}),
-  );
-
-  Widget _buildFixedBottomCard(BuildContext context) {
+  Widget _buildInfoCard(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final viewPadding = MediaQuery.of(context).padding;
 
-    // Spotlight konumu hesabı
+    // Kartın konumu: Spotlight aşağıdaysa kart yukarı, yukarıdaysa aşağı
     final bool isSpotlightAtBottom = _spotlightRect != null &&
-        _spotlightRect!.center.dy > (screenHeight * 0.5);
+        _spotlightRect!.center.dy > (screenHeight * 0.45);
 
-    // --- KRİTİK DÜZENLEME ---
-    // Metnin altta sabit kalması gereken adımları kontrol et
     final bool isFixedStep = [
       TutorialStep.category,
       TutorialStep.wordBoxes,
       TutorialStep.grid,
-      TutorialStep.startButton,
-      TutorialStep.findingLetters,
-      TutorialStep.success,
     ].contains(widget.currentStep);
 
-    // Eğer başlangıç aşamasındaysak VEYA isInitialPhase true ise kartı yukarı taşıma (false zorla)
     final bool moveToTop = (widget.isInitialPhase || isFixedStep) ? false : isSpotlightAtBottom;
 
-
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 400),
+      duration: 500.ms,
       curve: Curves.easeOutBack,
-      // Dinamik konumlandırma artık moveToTop değişkenine bakıyor:
       top: moveToTop ? viewPadding.top + 80 : null,
-      bottom: !moveToTop ? viewPadding.bottom + 40 : null,
+      bottom: !moveToTop ? viewPadding.bottom + 140 : null, // Bottom Nav üstüne çıkarıldı
       left: 20,
       right: 20,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2D1B18),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 2),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 20,
-                offset: const Offset(0, 10)
-            )
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.text,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 15,
-                height: 1.4,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            if (widget.showButton) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: widget.onNext,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber.shade700,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text(widget.buttonText, style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ),
+      child: Material( // Tıklanabilir butonlar için gerekli
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.border, width: 1.5),
+            boxShadow: [
+              BoxShadow(color: Colors.black45, blurRadius: 20, offset: const Offset(0, 10))
             ],
-          ],
-        ),
-      ).animate(key: ValueKey(widget.text)).fadeIn().slideY(begin: 0.2, end: 0),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.text,
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyLarge.copyWith(height: 1.5),
+              ),
+              if (widget.showButton) ...[
+                const SizedBox(height: 16),
+                _buildButton(),
+              ],
+            ],
+          ),
+        ).animate(key: ValueKey(widget.text)).fadeIn().slideY(begin: 0.1),
+      ),
     );
   }
+
+  Widget _buildButton() {
+    return InkWell(
+      onTap: widget.onNext,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryLight]),
+        ),
+        child: Center(
+          child: Text(widget.buttonText,
+              style: AppTypography.labelSmall.copyWith(color: AppColors.background, fontWeight: FontWeight.w900)),
+        ),
+      ),
+    );
+  }
+}
+
+// EK: Spotlight'ı pürüzsüz çizen ve deliği şeffaf bırakan Painter
+class SpotlightPainter extends CustomPainter {
+  final Rect rect;
+  final Color shadowColor;
+
+  SpotlightPainter({required this.rect, required this.shadowColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = shadowColor;
+
+    // Tüm ekranı boyayan ama hedef Rect alanını çıkaran (Subtract) yol
+    canvas.drawPath(
+      Path.combine(
+        PathOperation.difference,
+        Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
+        Path()..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8))),
+      ),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(SpotlightPainter oldDelegate) => rect != oldDelegate.rect;
 }

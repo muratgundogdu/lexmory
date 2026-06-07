@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 enum TutorialPhase { phase1, phase2, contextual }
 
 enum TutorialStep {
@@ -14,6 +16,18 @@ enum TutorialStep {
   forcedReveal,
   tokenInfo, // Yeni eklenen adım
   completed
+}
+
+class TutorialKeys {
+  static GlobalKey? categoryKey;
+  static GlobalKey? wordAreaKey;
+  static GlobalKey? gridKey;
+  static GlobalKey? startButtonKey;
+  static List<GlobalKey> gridTileKeys = [];
+  static GlobalKey? hintKey;
+  static GlobalKey? clearKey;
+  static GlobalKey? revealKey;
+  static GlobalKey? tokenKey;
 }
 
 class TutorialState {

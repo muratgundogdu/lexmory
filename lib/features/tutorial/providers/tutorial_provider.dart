@@ -15,6 +15,20 @@ class TutorialController extends StateNotifier<TutorialState> {
     _init();
   }
 
+  // --- HARF SEÇİMİ SONRASI SPOTLIGHT AKIŞI ---
+  Future<void> handleLetterSuccessFlow() async {
+    // 1. Spotlight'ı kelime alanına (WordBoxes) kaydır
+    state = state.copyWith(currentStep: TutorialStep.wordBoxes);
+
+    // 2. Oyuncunun harfin yerine yerleştiğini görmesi için 1.5 saniye bekle
+    await Future.delayed(const Duration(milliseconds: 1500));
+
+    // 3. Eğer kelime bitmediyse tekrar "Harf Bulma" adımına dön
+    if (state.currentStep == TutorialStep.wordBoxes) {
+      state = state.copyWith(currentStep: TutorialStep.findingLetters);
+    }
+  }
+
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     state = state.copyWith(
@@ -31,19 +45,87 @@ class TutorialController extends StateNotifier<TutorialState> {
     );
   }
 
-  Future<void> markFlag(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, true);
+  // --- JOKER SERİSİ BAŞLATMA (HARF AÇ) ---
+  void showJokerOnboarding() {
+    if (state.hintClearTutorialShown || state.isTutorialActive) return;
 
-    if (key == 'reveal_tutorial_shown') {
-      state = state.copyWith(revealTutorialShown: true, isTutorialActive: false);
-    } else if (key == 'token_tutorial_shown') {
-      state = state.copyWith(tokenTutorialShown: true);
-    } else if (key.startsWith('free_')) {
-      if (key == 'free_hint_used') state = state.copyWith(freeHintUsed: true);
-      if (key == 'free_remove_used') state = state.copyWith(freeRemoveUsed: true);
-      if (key == 'free_reveal_used') state = state.copyWith(freeRevealUsed: true);
+    // --- DÜZELTME: 2 Saniye Gecikme ---
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (!mounted) return;
+      state = state.copyWith(
+        isTutorialActive: true,
+        currentStep: TutorialStep.forcedHint,
+        phase: TutorialPhase.contextual,
+      );
+    });
+  }
+
+  // --- JOKER TANITIMINI TETİKLE (GAME SCREEN'DEN ÇAĞRILIR) ---
+  void startJokerOnboarding() {
+    // Eğer zaten tanıtıldıysa veya aktifse çalışma
+    if (state.hintClearTutorialShown || state.isTutorialActive) return;
+
+    // --- KRİTİK DÜZELTME: 2 Saniye Gecikme ---
+    // Bu sayede oyuncu yeni gelen kategoriyi ve harfleri net bir şekilde görür
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (!mounted) return;
+      state = state.copyWith(
+        isTutorialActive: true,
+        currentStep: TutorialStep.forcedHint,
+        phase: TutorialPhase.contextual,
+      );
+    });
+  }
+
+  // --- ADIM GEÇİŞ MANTIĞI (GECİKMELİ) ---
+  Future<void> nextStepWithDelay({required Duration animationDuration}) async {
+    await Future.delayed(animationDuration);
+    await Future.delayed(const Duration(milliseconds: 1500));
+
+    if (!mounted) return;
+
+    if (state.currentStep == TutorialStep.forcedHint) {
+      state = state.copyWith(
+        currentStep: TutorialStep.forcedClear,
+        isTutorialActive: true,
+      );
     }
+    else if (state.currentStep == TutorialStep.forcedClear) {
+      state = state.copyWith(
+        isTutorialActive: false,
+        hintClearTutorialShown: true,
+      );
+      _saveToPrefs('hint_clear_tutorial_shown', true);
+    }
+  }
+
+  // --- TEKRAR JOKERİ TANITIMI ---
+  void startForcedRevealOnboarding() {
+    if (state.revealTutorialShown || state.isTutorialActive) return;
+
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (!mounted) return;
+      state = state.copyWith(
+        isTutorialActive: true,
+        currentStep: TutorialStep.forcedReveal,
+        phase: TutorialPhase.contextual,
+      );
+    });
+  }
+
+  // --- JOKER ADIMINI TAMAMLA VE KAYDET ---
+  void completeJokerStep(String key) {
+    state = state.copyWith(isTutorialActive: false);
+
+    if (key == 'hint_joker_tutorial_completed') {
+      state = state.copyWith(hintJokerTutorialCompleted: true);
+    } else if (key == 'remove_joker_tutorial_completed') {
+      state = state.copyWith(removeJokerTutorialCompleted: true);
+    } else if (key == 'reveal_tutorial_shown') {
+      state = state.copyWith(revealTutorialShown: true);
+    }
+
+    _saveToPrefs(key, true);
   }
 
   void nextStep() {
@@ -70,184 +152,44 @@ class TutorialController extends StateNotifier<TutorialState> {
     }
   }
 
-  // --- PREMIUM JOKER GEÇİŞİ ---
-  // Bu metod GameNotifier içindeki animasyon tamamlandığında çağrılmalıdır.
-  // lib/features/tutorial/providers/tutorial_provider.dart
-
-// lib/features/tutorial/providers/tutorial_provider.dart
-
-  Future<void> nextStepWithDelay({required Duration animationDuration}) async {
-    // 1. Spotlight'ı kapat (Animasyon net görünsün)
-    state = state.copyWith(isTutorialActive: false);
-
-    // 2. Önce animasyonun bitmesini bekle
-    await Future.delayed(animationDuration);
-
-    // 3. İSTEDİĞİN BEKLEME SÜRESİ (1 dakika demişsin ama oyun akışı için
-    // şimdilik 5 saniye koyuyorum, istersen 'seconds: 60' yapabilirsin)
-    // Bu sürede currentStep hala 'forcedHint' kaldığı için sistem başa sarmaz.
-    await Future.delayed(const Duration(milliseconds: 2000)); // <--- Burayı güncelledik
-    final steps = TutorialStep.values;
-    final currentIndex = steps.indexOf(state.currentStep);
-
-    if (currentIndex < steps.length - 1) {
-      final nextStep = steps[currentIndex + 1];
-
-      // 4. EĞER YANLIŞ SİL BİTTİYSE (forcedClear adımı bittiyse)
-      if (state.currentStep == TutorialStep.forcedClear) {
-        state = state.copyWith(
-          isTutorialActive: false,
-          currentStep: TutorialStep.completed,
-        );
-        // Kalıcı olarak bitirildiğini diske yaz
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('tutorial_completed', true);
-        return;
-      }
-
-      // 5. ŞİMDİ adımı ilerlet ve yeni spotlight'ı aç
-      state = state.copyWith(
-        currentStep: nextStep,
-        isTutorialActive: true,
-      );
-    }
-  }
-
-  void showJokerOnboarding() {
-    showHintClearOnboarding();
-  }
-
-  void startForcedRevealOnboarding() {
-    state = state.copyWith(
-      isTutorialActive: true,
-      currentStep: TutorialStep.forcedReveal,
-      phase: TutorialPhase.contextual,
-    );
-  }
-
-  Future<void> showHintClearOnboarding() async {
-    if (state.hintClearTutorialShown ||
-        state.currentStep == TutorialStep.forcedHint ||
-        state.currentStep == TutorialStep.forcedClear) {
-      return;
-    }
-
-    state = state.copyWith(
-      isTutorialActive: true,
-      currentStep: TutorialStep.forcedHint,
-      phase: TutorialPhase.contextual,
-      hintClearTutorialShown: true, // <--- Burası çok önemli
-    );
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('hint_clear_tutorial_shown', true);
-  }
-
-  Future<void> startHintJokerTutorial() async {
-    state = state.copyWith(
-      isTutorialActive: true,
-      currentStep: TutorialStep.forcedHint,
-      phase: TutorialPhase.contextual,
-    );
-  }
-
-  Future<void> startJokerOnboarding() async {
-    if (state.currentStep == TutorialStep.forcedHint ||
-        state.currentStep == TutorialStep.forcedClear) {return;}
-
-    if (state.hintJokerTutorialCompleted &&
-        state.removeJokerTutorialCompleted) {return;}
-
-    state = state.copyWith(
-      isTutorialActive: true,
-      currentStep: TutorialStep.forcedHint,
-      phase: TutorialPhase.contextual,
-    );
-  }
-
-
-  void completeJokerStep(String key) {
-    // 1. ADIM: Arayüzü ANINDA kapat
-    state = state.copyWith(isTutorialActive: false);
-
-    if (key == 'hint_joker_tutorial_completed') {
-      state = state.copyWith(hintJokerTutorialCompleted: true);
-    }
-    // YENİ: Tekrar jokeri bayrağını state üzerinde güncelle
-    else if (key == 'reveal_tutorial_shown') {
-      state = state.copyWith(revealTutorialShown: true);
-    }
-    else {
-      state = state.copyWith(removeJokerTutorialCompleted: true);
-    }
-
-    // 2. ADIM: Kalıcı olarak diske kaydet (Burası bir daha çıkmamasını sağlar)
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setBool(key, true);
-    });
-  }
-
-  void showRevealOnboarding() {
-    // Eğer zaten gösterildiyse VEYA şu an zorunlu bir adım aktifse çalışma
-    if (state.revealTutorialShown || state.isTutorialActive) {
-      return;
-    }
-
-    state = state.copyWith(
-      isTutorialActive: true,
-      currentStep: TutorialStep.forcedReveal,
-      phase: TutorialPhase.contextual,
-    );
-  }
-
-  void startForcedJokerTutorial() {
-    state = state.copyWith(
-      isTutorialActive: true,
-      currentStep: TutorialStep.forcedHint,
-      phase: TutorialPhase.contextual,
-    );
-  }
-
   void startPhase2Practice() {
     state = state.copyWith(
       currentStep: TutorialStep.phase2Play,
       phase: TutorialPhase.phase2,
+      isTutorialActive: true,
     );
   }
 
-  void setTutorialActive(bool active) {
-    state = state.copyWith(isTutorialActive: active);
-  }
-
   Future<void> completeTutorial() async {
+    state = state.copyWith(isTutorialActive: false, currentStep: TutorialStep.completed);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('tutorial_completed', true);
-    state = state.copyWith(isTutorialActive: false, currentStep: TutorialStep.completed);
-
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      startJokerOnboarding();
-    });
   }
-
 
   Future<void> showTokenTutorial() async {
     if (state.tokenTutorialShown) return;
-
     state = state.copyWith(
       isTutorialActive: true,
       currentStep: TutorialStep.tokenInfo,
       phase: TutorialPhase.contextual,
+      tokenTutorialShown: true,
     );
-
-    // Kalıcı olarak kaydet
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('token_tutorial_shown', true);
-    state = state.copyWith(tokenTutorialShown: true);
+    _saveToPrefs('token_tutorial_shown', true);
   }
 
-  // Tutorial'ı kapat ve oyuna dön
   void closeTokenTutorial() {
     state = state.copyWith(isTutorialActive: false);
   }
 
+  Future<void> _saveToPrefs(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
+
+  void markFlag(String key) {
+    if (key == 'free_hint_used') state = state.copyWith(freeHintUsed: true);
+    if (key == 'free_remove_used') state = state.copyWith(freeRemoveUsed: true);
+    if (key == 'free_reveal_used') state = state.copyWith(freeRevealUsed: true);
+    _saveToPrefs(key, true);
+  }
 }
