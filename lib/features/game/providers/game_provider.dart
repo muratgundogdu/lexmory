@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // Core & Data
 import '../../../core/app_constants.dart';
-import '../../../../data/categories.dart';
 
 // Tutorial
 import '../../tutorial/models/tutorial_state.dart';
@@ -32,8 +31,8 @@ class GameNotifier extends StateNotifier<GameState> {
 
   GameNotifier(this._repository, this._adService, this._ref) : super(_createPlaceholderState()) {
     _init();
+    loadTokens();
   }
-
   Future<void> _init() async {
     await _loadFromStorage();
     _checkOfflineRegeneration();
@@ -96,6 +95,7 @@ class GameNotifier extends StateNotifier<GameState> {
         tokens: state.tokens + rewardAmount,
         showOutOfTokensPanel: false,
         pendingAdReward: 0,
+        hasClaimedDoubleReward: true,
         rewardTrigger: state.rewardTrigger + 1,
       );
       _persist();
@@ -255,6 +255,46 @@ class GameNotifier extends StateNotifier<GameState> {
     if (!newFound.contains(null)) {
       _handleWordVictory();
     }
+  }
+
+// lib/features/game/providers/game_provider.dart
+
+// Dönüş tipini void yerine Future<void> yapın
+  Future<void> spendTokens(int amount) async {
+    final int currentTokens = state.tokens;
+    final int newTokens = currentTokens - amount;
+
+    // 1. UI'ı anında güncelle
+    state = state.copyWith(tokens: newTokens);
+
+    // 2. DISKE KAYDET
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('user_tokens', newTokens);
+
+    // Persist metodunu da çağırarak genel state kaydını garantiye alın
+    await _persist();
+  }
+
+  Future<void> loadTokens() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int? savedTokens = prefs.getInt('user_tokens');
+
+    if (savedTokens != null) {
+      state = state.copyWith(tokens: savedTokens);
+    }
+  }
+
+  void doubleRewardWithAd() {
+    // Mevcut ödül kadar (150) ekleme yap
+    state = state.copyWith(
+      tokens: state.tokens + 150,
+      // Reklam izlendiği için butonu gizlemek adına bir flag tutabilirsiniz
+      hasClaimedDoubleReward: true,
+    );
+  }
+
+  void resetDoubleReward() {
+    state = state.copyWith(hasClaimedDoubleReward: false);
   }
 
   void _handleWrongSelection(int gridIdx) async {

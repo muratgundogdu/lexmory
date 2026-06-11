@@ -90,77 +90,79 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 1. SATIR: [TOKEN] --- [KATEGORİ Etiketi] --- [STREAK]
+        // GameHeader build metodu içindeki Row yapısını bu şekilde güncelle:
+
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start, // Üstten hizalama önemli
           children: [
-            // SOL: Token ve Sayaç alanı
-            Expanded(
+            // 1. SOL: Token alanı (Genişliği içeriğe göre, ama aşırı büyümesini engelliyoruz)
+            IntrinsicWidth(
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: _buildTokenArea(isPenalty),
               ),
             ),
 
-            // ORTA: Kategori Etiketi ve İsim Bloğu
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 10), // TokenBadge ile hizalamak için
-                Text(
-                  "KATEGORİ",
-                  style: AppTypography.labelSmall.copyWith(
-                    color: AppColors.textMuted,
-                    letterSpacing: 3.0,
-                    fontSize: 10,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // Dinamik Kategori Adı (Burayı tutorial Key ile sarmaladık)
-                Container(
-                  key: widget.categoryKey,
-                  child: Column(
-                    children: [
-                      Text(
-                        widget.game.category.toUpperCase(),
-                        textAlign: TextAlign.center,
-                        style: AppTypography.pageTitle.copyWith(
-                          fontSize: 22, // İstediğin %15 küçültülmüş boyut
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.textPrimary,
-                          letterSpacing: 1.2,
-                          shadows: [
-                            Shadow(
-                              color: AppColors.primary.withValues(alpha: 0.2),
-                              blurRadius: 15,
-                            )
-                          ],
-                        ),
+            // 2. ORTA: Kategori Bloğu (Esnek Alan)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8), // Yanlardan boşluk
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
+                    Text(
+                      "KATEGORİ",
+                      style: AppTypography.labelSmall.copyWith(
+                        color: AppColors.textMuted,
+                        letterSpacing: 3.0,
+                        fontSize: 10,
                       ),
-                      const SizedBox(height: 4),
-                      // Altın Dekoratif Çizgi
-                      Container(
-                        width: 30,
-                        height: 2,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(2),
-                          gradient: const LinearGradient(
-                            colors: [
-                              Colors.transparent,
-                              AppColors.primary,
-                              Colors.transparent
-                            ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      key: widget.categoryKey,
+                      child: Column(
+                        children: [
+                          Text(
+                            widget.game.category.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            maxLines: 2, // Çok uzunsa 2 satıra izin ver
+                            overflow: TextOverflow.ellipsis, // Hala sığmazsa ... yap
+                            style: AppTypography.pageTitle.copyWith(
+                              // Kategori çok uzunsa fontu küçült (Dinamik fontSize)
+                              fontSize: widget.game.category.length > 15 ? 16 : 20,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textPrimary,
+                              letterSpacing: 1.2,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 4),
+                          // Altın Dekoratif Çizgi
+                          Container(
+                            width: 30,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2),
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  AppColors.primary,
+                                  Colors.transparent
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1),
-              ],
+                    ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1),
+                  ],
+                ),
+              ),
             ),
 
-            // SAĞ: Streak Badge
-            Expanded(
+            // 3. SAĞ: Streak Badge (İçeriğine göre genişlik alır)
+            IntrinsicWidth(
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Padding(
@@ -181,17 +183,37 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildTokenBadge(isPenalty),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4), // Rozet ile metin arası boşluk
         Padding(
           padding: const EdgeInsets.only(left: 4),
-          child: RegenCountdown(
-            lastRegenTime: widget.game.lastRegenTime,
-            currentTokens: widget.game.tokens,
-            style: AppTypography.bodyMedium.copyWith(
-              fontSize: 9,
-              color: AppColors.textMuted,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. SATIR: Başlık
+              Text(
+                "Yenileniyor..",
+                style: AppTypography.labelSmall.copyWith(
+                  fontSize: 7.5,
+                  color: AppColors.textMuted.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 1), // İki satır arası çok dar boşluk
+              // 2. SATIR: Geri sayım süresi
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: RegenCountdown(
+                  lastRegenTime: widget.game.lastRegenTime,
+                  currentTokens: widget.game.tokens,
+                  style: AppTypography.bodyMedium.copyWith(
+                    fontSize: 10,
+                    color: AppColors.primary, // Süre altın sarısı (primary)
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

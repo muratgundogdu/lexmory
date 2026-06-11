@@ -16,8 +16,7 @@ dependencies:
   google_fonts: ^6.2.1
   shared_preferences: ^2.2.3
   flutter_native_splash: ^2.4.4
-  google_mobile_ads: ^5.2.0 # Bu satırı ekle
-
+  google_mobile_ads: ^5.2.0
 
 dev_dependencies:
   flutter_test:
@@ -25,7 +24,6 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
 
-# Uygulama ikon ayarları kalıyor
 flutter_launcher_icons:
   android: true
   ios: true
@@ -36,13 +34,12 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
 
-  # Kendi Splash Screen'in için gerekli görsel asset'i
   assets:
     - lib/assets/images/splash/splash.png
     - lib/assets/icon/lexmory_native_splash.png
     - lib/assets/icon/native_splash.png
     - lib/assets/images/splash/app_splash.png
-    - lib/assets/library/room_01
+    - lib/assets/library/room_01/
 
 flutter_native_splash:
   color: "#0F0F10"
@@ -56,4 +53,3 @@ flutter_native_splash:
   android: true
   ios: true
   web: false
-

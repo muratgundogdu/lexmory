@@ -58,7 +58,7 @@ class _RegenCountdownState extends State<RegenCountdown> {
     if (widget.currentTokens >= 100 || _timeLeft.isEmpty) return const SizedBox.shrink();
 
     return Text(
-      "Jeton Toplanıyor: $_timeLeft",
+      _timeLeft,
       style: widget.style ?? GoogleFonts.poppins(
         fontSize: 10,
         color: Colors.white38,

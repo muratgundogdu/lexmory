@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../game/models/game_state.dart';
 import '../../game/providers/game_provider.dart';
 import '../../game/view/game_screen.dart';
-import '../../library/view/library_screen.dart';
+import '../../library/screens/library_overview_screen.dart';
 import '../../store/view/store_screen.dart';
 import '../../settings/view/settings_screen.dart';
 import '../../tutorial/models/tutorial_state.dart' hide TutorialKeys;
@@ -26,7 +26,7 @@ class MainNavigationScreen extends ConsumerWidget {
 
     final List<Widget> screens = [
       const GameScreen(),
-      const LibraryScreen(),
+      const LibraryOverviewScreen(),
       const StoreScreen(),
       const SettingsScreen(),
     ];
@@ -67,9 +67,11 @@ class MainNavigationScreen extends ConsumerWidget {
       case TutorialStep.wordBoxes:
       // Eğer harf seçiminden sonra buraya kaydıysak (handleLetterSuccessFlow çalıştıysa)
         String flowText = "Bulman gereken kelime burada yer alır.";
+        bool showBtn = true;
 
         if (tutorialState.phase == TutorialPhase.phase1 && game.hasStarted) {
           flowText = "Harika! ✨\nHarf ait olduğu yere yerleşti. Devam edelim...";
+          showBtn = false; // Harf yerleştiğinde buton gösterme, otomatik geçecek
         }
 
         return TutorialOverlay(
@@ -77,6 +79,7 @@ class MainNavigationScreen extends ConsumerWidget {
           currentStep: step,
           isInitialPhase: true,
           text: flowText,
+          showButton: showBtn,
           onNext: () => notifier.nextStep(),
         );
 

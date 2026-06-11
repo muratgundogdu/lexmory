@@ -77,6 +77,8 @@ class GameState {
   final int totalSolvedWords;
   final int totalEarnedTokens;
 
+  final bool hasClaimedDoubleReward; // Bu satırı ekle
+
   final int pendingAdReward; // Eklenen satır
 
   const GameState({
@@ -114,6 +116,7 @@ class GameState {
     this.lastReward,
     this.lastCompletedCategory,
     this.pendingAdReward = 0, // Default 0
+    this.hasClaimedDoubleReward = false, // Varsayılan değer false
   });
 
   GameState copyWith({
@@ -151,6 +154,7 @@ class GameState {
     bool? letterJustSettled,
     bool? tutorialLock, // copyWith'e eklendi
     int? pendingAdReward,
+    bool? hasClaimedDoubleReward, // Buraya ekle
   }) {
     return GameState(
       category: category ?? this.category,
@@ -187,6 +191,7 @@ class GameState {
       letterJustSettled: letterJustSettled ?? this.letterJustSettled,
       tutorialLock: tutorialLock ?? this.tutorialLock, // Atama yapıldı
       pendingAdReward: pendingAdReward ?? this.pendingAdReward,
+      hasClaimedDoubleReward: hasClaimedDoubleReward ?? this.hasClaimedDoubleReward,
     );
   }
 

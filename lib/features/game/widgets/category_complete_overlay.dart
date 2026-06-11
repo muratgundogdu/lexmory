@@ -12,6 +12,8 @@ class CategoryCompleteOverlay extends StatelessWidget {
   final int totalJokers;
   final int sectionCount;
   final VoidCallback onContinue;
+  final VoidCallback onDoubleReward; // Yeni parametre
+  final bool hasDoubleClaimed; // Ödülün alınıp alınmadığını takip etmek için
 
   const CategoryCompleteOverlay({
     super.key,
@@ -21,6 +23,8 @@ class CategoryCompleteOverlay extends StatelessWidget {
     required this.totalJokers,
     required this.sectionCount,
     required this.onContinue,
+    required this.onDoubleReward,
+    this.hasDoubleClaimed = false,
   });
 
   @override
@@ -36,7 +40,10 @@ class CategoryCompleteOverlay extends StatelessWidget {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: AppDimens.s40),
+              padding: const EdgeInsets.only(
+                top: AppDimens.s40,
+                bottom: 120, // NavBar yüksekliğini kompanse eder
+              ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -167,29 +174,84 @@ class CategoryCompleteOverlay extends StatelessWidget {
   }
 
   Widget _buildRewardBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppDimens.radiusXL),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text("🪙", style: TextStyle(fontSize: 20)),
-          const SizedBox(width: 10),
-          Text(
-            "+150 TOKEN KAZANILDI",
-            style: AppTypography.labelSmall.copyWith(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1,
-            ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Ana Ödül Rozeti
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(AppDimens.radiusXL),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("🪙", style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 10),
+              Text(
+                hasDoubleClaimed ? "+300 TOKEN KAZANILDI" : "+150 TOKEN KAZANILDI",
+                style: AppTypography.labelSmall.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+        ).animate().fadeIn(delay: 400.ms).scale(begin: const Offset(0.8, 0.8)),
+
+        // Eğer ödül katlanmadıysa x2 butonunu göster
+        if (!hasDoubleClaimed) ...[
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: onDoubleReward,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFD4A574), Color(0xFFF2C078)], // Altın Gradyan
+                ),
+                borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFD4A574).withValues(alpha: 0.4),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  )
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.play_circle_fill, size: 16, color: Colors.black),
+                  const SizedBox(width: 4),
+                  Text(
+                    "x2",
+                    style: AppTypography.labelSmall.copyWith(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            )
+            // SÜREKLİ BÜYÜYÜP KÜÇÜLME ANİMASYONU
+                .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                .scale(
+              begin: const Offset(1, 1),
+              end: const Offset(1.15, 1.15),
+              duration: 800.ms,
+              curve: Curves.easeInOut,
+            )
+            // ARADA BİR PARLAMA (SHIMMER) EFEKTİ
+                .animate()
+                .shimmer(delay: 2.seconds, duration: 1.seconds, color: Colors.white24),
+          ).animate().fadeIn(delay: 600.ms).slideX(begin: 0.2),
         ],
-      ),
-    ).animate().fadeIn(delay: 400.ms).scale(begin: const Offset(0.8, 0.8));
+      ],
+    );
   }
 
   Widget _buildStatsGrid() {

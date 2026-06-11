@@ -11,9 +11,6 @@ import '../../../core/app_typography.dart';
 import '../../tutorial/models/tutorial_state.dart' hide TutorialKeys;
 import '../../tutorial/providers/tutorial_provider.dart';
 import '../../tutorial/models/tutorial_keys.dart';
-import '../../tutorial/widgets/tutorial_overlay.dart';
-import '../../tutorial/widgets/tutorial_phase2_intro.dart';
-import '../../tutorial/widgets/tutorial_success_overlay.dart';
 
 // Game Logic & Models
 import '../models/game_state.dart';
@@ -169,6 +166,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           sectionCount: game.currentWordIndex + 1,
           totalWrong: game.totalCategoryWrongCount,
           totalJokers: game.totalCategoryJokersCount,
+          hasDoubleClaimed: game.hasClaimedDoubleReward,
+          onDoubleReward: () {
+            ref.read(gameProvider.notifier).watchAdForTokens();
+          },
           onContinue: () => ref.read(gameProvider.notifier).startNextCategory(),
         ),
         GameFinishedOverlay(
