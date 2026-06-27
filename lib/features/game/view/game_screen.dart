@@ -166,10 +166,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           sectionCount: game.currentWordIndex + 1,
           totalWrong: game.totalCategoryWrongCount,
           totalJokers: game.totalCategoryJokersCount,
-          hasDoubleClaimed: game.hasClaimedDoubleReward,
-          onDoubleReward: () {
-            ref.read(gameProvider.notifier).watchAdForTokens();
-          },
           onContinue: () => ref.read(gameProvider.notifier).startNextCategory(),
         ),
         GameFinishedOverlay(
@@ -205,23 +201,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     return Center(
       child: GestureDetector(
         key: TutorialKeys.startButtonKey,
-        onTap: () async {
+        onTap: () {
           ref.read(gameProvider.notifier).startMemoryReveal();
           final tutorialState = ref.read(tutorialProvider);
 
           if (tutorialState.isTutorialActive &&
               tutorialState.currentStep == TutorialStep.startButton) {
             ref.read(tutorialProvider.notifier).nextStep();
-          }
-          // 1.5 saniye sonra Tekrar (Reveal) Tanıtımı başlasın (Talebe göre 1500ms)
-          else if (tutorialState.phase == TutorialPhase.contextual &&
-              !tutorialState.isTutorialActive &&
-              !tutorialState.revealTutorialShown &&
-              game.category != "Meyveler") {
-            await Future.delayed(const Duration(milliseconds: 1500));
-            if (mounted) {
-              ref.read(tutorialProvider.notifier).startForcedRevealOnboarding();
-            }
           }
         },
         child: Container(

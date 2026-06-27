@@ -23,6 +23,7 @@ class RoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Stage-PNG sisteminde progress 1.0 ise oda bitmiştir
     final bool isCompleted = progress >= 1.0;
 
     return GestureDetector(
@@ -33,91 +34,89 @@ class RoomCard extends StatelessWidget {
           color: const Color(0xFF1A1A1C),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isCompleted 
-                ? const Color(0xFFD4A574).withValues(alpha: 0.5) 
+            color: isCompleted
+                ? const Color(0xFFD4A574).withValues(alpha: 0.5)
                 : const Color(0xFF2E2E32),
             width: isCompleted ? 2 : 1,
           ),
-          boxShadow: isCompleted ? [
+          boxShadow: [
             BoxShadow(
-              color: const Color(0xFFD4A574).withValues(alpha: 0.1),
+              color: isCompleted
+                  ? const Color(0xFFD4A574).withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.3),
               blurRadius: 15,
-              spreadRadius: 2,
+              offset: const Offset(0, 8),
             )
-          ] : null,
+          ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Hero Image Area (16:9) - Artık Kırpılmıyor
+              // 1. GÖRSEL ALANI (Thumbnail - 16:9)
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: Container(
-                  color: const Color(0xFF141414),
-                  child: Stack(
-                    children: [
-                      // Arka Plan Görseli (Contain ile tam görünür)
-                      Positioned.fill(
-                        child: Image.asset(
-                          imagePath,
-                          fit: BoxFit.fitWidth,
-                          filterQuality: FilterQuality.medium,
-                          isAntiAlias: true,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: Colors.white10,
-                            child: const Icon(Icons.broken_image, color: Colors.white24, size: 48),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.asset(
+                        imagePath,
+                        // ANALİZ: Thumbnail olduğu için cover en iyi sonucu verir
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: const Color(0xFF141414),
+                          child: const Icon(Icons.broken_image, color: Colors.white10, size: 40),
+                        ),
+                      ),
+                    ),
+
+                    // Kilit Overlay
+                    if (isLocked)
+                      Container(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        child: const Center(
+                          child: Icon(
+                            Icons.lock_outline_rounded,
+                            color: Color(0xFFD4A574),
+                            size: 44,
                           ),
                         ),
                       ),
 
-                      // Kilitli Karartma (Blur kaldırıldı)
-                      if (isLocked)
-                        Container(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          child: const Center(
-                            child: Icon(
-                              Icons.lock_outline_rounded,
-                              color: Color(0xFFD4A574),
-                              size: 40,
+                    // Tamamlandı Rozeti (Premium Badge)
+                    if (isCompleted && !isLocked)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFD4A574), Color(0xFFF2C078)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black45, blurRadius: 4)
+                            ],
+                          ),
+                          child: Text(
+                            "✓ TAMAMLANDI",
+                            style: GoogleFonts.outfit(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
-
-                      // Tamamlandı Rozeti
-                      if (isCompleted && !isLocked)
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFD4A574),
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                )
-                              ],
-                            ),
-                            child: Text(
-                              "✓ TAMAMLANDI",
-                              style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               ),
 
-              // Bilgi Alanı
+              // 2. BİLGİ VE PROGRESS ALANI
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -125,58 +124,35 @@ class RoomCard extends StatelessWidget {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              if (isLocked && lockRequirement != null)
-                                Text(
-                                  lockRequirement!,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    color: const Color(0xFFD4A574),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                )
-                              else
-                                Text(
-                                  description,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    color: const Color(0xFF8E8E93),
-                                  ),
-                                ),
-                            ],
+                          child: Text(
+                            name.toUpperCase(),
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: isLocked ? Colors.white38 : Colors.white,
+                              letterSpacing: 1.2,
+                            ),
                           ),
                         ),
                         if (!isLocked)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              color: Colors.white24,
-                              size: 14,
-                            ),
-                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white12, size: 14),
                       ],
                     ),
-                    
+                    const SizedBox(height: 6),
+                    Text(
+                      isLocked ? (lockRequirement ?? "Kilitli Bölüm") : description,
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: isLocked ? const Color(0xFFD4A574).withValues(alpha: 0.6) : const Color(0xFF8E8E93),
+                        fontWeight: isLocked ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+
                     if (!isLocked) ...[
-                      const SizedBox(height: 16),
-                      // İlerleme Barı (Premium Gradient)
+                      const SizedBox(height: 20),
+                      // Premium Progress Bar
                       Stack(
                         children: [
                           Container(
@@ -186,7 +162,9 @@ class RoomCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(3),
                             ),
                           ),
-                          FractionallySizedBox(
+                          AnimatedFractionallySizedBox(
+                            duration: const Duration(milliseconds: 1000),
+                            curve: Curves.easeOutCubic,
                             widthFactor: progress.clamp(0.0, 1.0),
                             child: Container(
                               height: 6,
@@ -206,16 +184,23 @@ class RoomCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        isCompleted 
-                            ? "Tüm geliştirmeler tamamlandı" 
-                            : "%${(progress * 100).toInt()} Geliştirildi",
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          color: const Color(0xFF8E8E93),
-                          fontWeight: FontWeight.w500,
-                        ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isCompleted ? "Tüm eşyalar yerleştirildi" : "Gelişim devam ediyor",
+                            style: GoogleFonts.outfit(fontSize: 10, color: Colors.white24),
+                          ),
+                          Text(
+                            "%${(progress * 100).toInt()}",
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: const Color(0xFFF2C078),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],

@@ -10,6 +10,10 @@ import '../../../core/utils.dart';
 import '../../../widgets/regen_countdown.dart';
 import '../models/game_state.dart';
 
+// Yeni import'lar:
+import '../../missions/view/daily_mission_button.dart'; // DailyMissionButton'ın yeni yolu
+import '../../missions/view/daily_mission_sheet.dart'; // DailyMissionSheet'in yeni yolu
+
 class GameHeader extends ConsumerStatefulWidget {
   final GameState game;
   final GlobalKey tokenKey;
@@ -30,6 +34,8 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
   late int _displayTokens;
   Timer? _timer;
   bool _showParticles = false;
+  // Yeni: Günlük görev durumu (Riverpod entegrasyonu öncesi local state kontrolü)
+  bool _hasPendingDailyMission = true;
 
   @override
   void initState() {
@@ -41,7 +47,6 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
   void didUpdateWidget(GameHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Ödül tetiklendiğinde parçacıkları göster
     if (widget.game.rewardTrigger > oldWidget.game.rewardTrigger) {
       setState(() => _showParticles = true);
       Future.delayed(const Duration(milliseconds: 2500), () {
@@ -49,7 +54,6 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
       });
     }
 
-    // Sayacı güncelleme mantığı
     if (!widget.game.showCategoryCompletePanel) {
       if (widget.game.tokens != _displayTokens) {
         _startRollingCounter(widget.game.tokens);
@@ -87,91 +91,101 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
   Widget build(BuildContext context) {
     final bool isPenalty = widget.game.isLastAttemptCorrect == false;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // GameHeader build metodu içindeki Row yapısını bu şekilde güncelle:
+        // SOL: Token ve Sayaç
+        IntrinsicWidth(
+          child: _buildTokenArea(isPenalty),
+        ),
 
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start, // Üstten hizalama önemli
-          children: [
-            // 1. SOL: Token alanı (Genişliği içeriğe göre, ama aşırı büyümesini engelliyoruz)
-            IntrinsicWidth(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _buildTokenArea(isPenalty),
-              ),
-            ),
-
-            // 2. ORTA: Kategori Bloğu (Esnek Alan)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8), // Yanlardan boşluk
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 10),
-                    Text(
-                      "KATEGORİ",
-                      style: AppTypography.labelSmall.copyWith(
-                        color: AppColors.textMuted,
-                        letterSpacing: 3.0,
-                        fontSize: 10,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      key: widget.categoryKey,
-                      child: Column(
-                        children: [
-                          Text(
-                            widget.game.category.toUpperCase(),
-                            textAlign: TextAlign.center,
-                            maxLines: 2, // Çok uzunsa 2 satıra izin ver
-                            overflow: TextOverflow.ellipsis, // Hala sığmazsa ... yap
-                            style: AppTypography.pageTitle.copyWith(
-                              // Kategori çok uzunsa fontu küçült (Dinamik fontSize)
-                              fontSize: widget.game.category.length > 15 ? 16 : 20,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Altın Dekoratif Çizgi
-                          Container(
-                            width: 30,
-                            height: 2,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(2),
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  AppColors.primary,
-                                  Colors.transparent
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1),
-                  ],
+        // ORTA: Kategori Bilgisi
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  "KATEGORİ",
+                  style: AppTypography.labelSmall.copyWith(
+                    color: AppColors.textMuted,
+                    letterSpacing: 3.0,
+                    fontSize: 10,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 6),
+                Container(
+                  key: widget.categoryKey,
+                  child: Column(
+                    children: [
+                      Text(
+                        widget.game.category.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.pageTitle.copyWith(
+                          fontSize: widget.game.category.length > 15 ? 16 : 20,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.textPrimary,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        width: 30,
+                        height: 2,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          gradient: const LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              AppColors.primary,
+                              Colors.transparent
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1),
+              ],
             ),
+          ),
+        ),
 
-            // 3. SAĞ: Streak Badge (İçeriğine göre genişlik alır)
-            IntrinsicWidth(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: _buildStreakArea(),
-                ),
-              ),
-            ),
-          ],
+        // SAĞ: Streak Alanı
+        IntrinsicWidth(
+          child: Padding(
+            // Streak varken butonla arasında 6px boşluk bırakır
+            padding: const EdgeInsets.only(left: 2, right: 6),
+            child: _buildStreakArea(),
+          ),
+        ),
+
+        // YENİ SAĞ KÖŞE: Günlük Görevler Butonu
+        Padding(
+          // 🎯 DÜZELTME: Streak olsa da olmasa da buton ekranın sağ sınırından
+          // tam olarak 5 piksel içeride sabitlenecek. Ne eksik ne fazla.
+          padding: const EdgeInsets.only(right: 5.0),
+          child: DailyMissionButton(
+            hasPendingDailyMission: _hasPendingDailyMission,
+            onPressed: () {
+              setState(() {
+                _hasPendingDailyMission = !_hasPendingDailyMission;
+              });
+
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (BuildContext ctx) {
+                  return const DailyMissionSheet();
+                },
+              );
+            },
+          ),
         ),
       ],
     );
@@ -183,37 +197,17 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildTokenBadge(isPenalty),
-        const SizedBox(height: 4), // Rozet ile metin arası boşluk
+        const SizedBox(height: 2),
         Padding(
           padding: const EdgeInsets.only(left: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. SATIR: Başlık
-              Text(
-                "Yenileniyor..",
-                style: AppTypography.labelSmall.copyWith(
-                  fontSize: 7.5,
-                  color: AppColors.textMuted.withValues(alpha: 0.8),
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 1), // İki satır arası çok dar boşluk
-              // 2. SATIR: Geri sayım süresi
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: RegenCountdown(
-                  lastRegenTime: widget.game.lastRegenTime,
-                  currentTokens: widget.game.tokens,
-                  style: AppTypography.bodyMedium.copyWith(
-                    fontSize: 10,
-                    color: AppColors.primary, // Süre altın sarısı (primary)
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
+          child: RegenCountdown(
+            lastRegenTime: widget.game.lastRegenTime,
+            currentTokens: widget.game.tokens,
+            style: AppTypography.bodyMedium.copyWith(
+              fontSize: 10,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ],
@@ -221,9 +215,10 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
   }
 
   Widget _buildStreakArea() {
-    // Streak 0 ise alanı ayırıyoruz ki simetri bozulmasın
+    // 🎯 DÜZELTME 2: Streak 0 olduğunda sabit genişlikli boş kutu yerine shrink döndürüyoruz.
+    // Böylece buton ekranın en sağına tam yapışıyor.
     if (widget.game.streak == 0) {
-      return const SizedBox(width: 40, height: 36);
+      return const SizedBox.shrink();
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -239,7 +234,7 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
               color: AppColors.warning, size: 16),
           const SizedBox(width: 4),
           Text(
-            "x${widget.game.streak}",
+            "${widget.game.streak}",
             style: AppTypography.labelSmall.copyWith(
               color: AppColors.warning,
               fontWeight: FontWeight.w900,
@@ -256,14 +251,11 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
       alignment: Alignment.centerLeft,
       clipBehavior: Clip.none,
       children: [
-        // Tutorial parmağı burayı hedef alır
         SizedBox(
           key: widget.tokenKey,
           width: 85,
           height: 36,
         ),
-
-        // Coin Parçacıkları
         if (_showParticles)
           ...List.generate(6, (index) {
             return Positioned(
@@ -280,8 +272,6 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
                   .fadeOut(delay: 300.ms),
             );
           }),
-
-        // Görsel Token Kutusu
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(

@@ -17,6 +17,7 @@ dependencies:
   shared_preferences: ^2.2.3
   flutter_native_splash: ^2.4.4
   google_mobile_ads: ^5.2.0
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
@@ -35,11 +36,24 @@ flutter:
   uses-material-design: true
 
   assets:
-    - lib/assets/images/splash/splash.png
-    - lib/assets/icon/lexmory_native_splash.png
     - lib/assets/icon/native_splash.png
     - lib/assets/images/splash/app_splash.png
     - lib/assets/library/room_01/
+    - lib/assets/library/room_02/
+    - lib/assets/library/room_03/
+    - lib/assets/library/room_04/
+    - lib/assets/library/room_05/
+    - lib/assets/library/room_06/
+    - lib/assets/library/room_07/
+    - lib/assets/library/room_08/
+    - lib/assets/library/room_09/
+    - lib/assets/library/room_10/
+    - lib/assets/library/room_11/
+    - lib/assets/library/room_12/
+    - lib/assets/library/room_13/
+    - lib/assets/library/room_14/
+    - lib/assets/library/room_15/
+    - lib/assets/cards/
 
 flutter_native_splash:
   color: "#0F0F10"

@@ -103,7 +103,7 @@ class TutorialController extends StateNotifier<TutorialState> {
   void startForcedRevealOnboarding() {
     if (state.revealTutorialShown || state.isTutorialActive) return;
 
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       state = state.copyWith(
         isTutorialActive: true,

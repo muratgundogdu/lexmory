@@ -7,63 +7,80 @@ import '../../game/providers/game_provider.dart';
 class LibraryNotifier extends StateNotifier<LibraryState> {
   final Ref ref;
   static const String _storageKey = 'lexmory_library_stages';
+  static const String _unlockKey = 'lexmory_library_unlocks'; // Kilitli odalar için yeni key
 
-  LibraryNotifier(this.ref) : super(LibraryState(roomStages: {"room_01": 0}, unlockedRoomIds: ["room_01"])) {
-    _loadFromDisk(); // Uygulama açılınca yükle
+  LibraryNotifier(this.ref) : super(LibraryState.initial()) {
+    _loadFromDisk();
   }
 
   // Cihazdan verileri yükle
   Future<void> _loadFromDisk() async {
     final prefs = await SharedPreferences.getInstance();
-    final List<String>? savedData = prefs.getStringList(_storageKey);
+    final List<String>? savedStages = prefs.getStringList(_storageKey);
+    final List<String>? savedUnlocks = prefs.getStringList(_unlockKey);
 
-    if (savedData != null) {
-      Map<String, int> loadedStages = {};
-      List<String> loadedUnlocks = ["room_01"];
+    Map<String, int> loadedStages = Map.from(state.roomStages);
+    List<String> loadedUnlocks = List.from(state.unlockedRoomIds);
 
-      for (var item in savedData) {
-        final parts = item.split(':'); // room_01:3 formatında saklıyoruz
+    if (savedStages != null) {
+      for (var item in savedStages) {
+        final parts = item.split(':');
         if (parts.length == 2) {
           loadedStages[parts[0]] = int.parse(parts[1]);
-          if (int.parse(parts[1]) > 0 && !loadedUnlocks.contains(parts[0])) {
-            loadedUnlocks.add(parts[0]);
-          }
         }
       }
-      state = state.copyWith(roomStages: loadedStages, unlockedRoomIds: loadedUnlocks);
     }
+
+    if (savedUnlocks != null) {
+      loadedUnlocks = savedUnlocks;
+    }
+
+    state = state.copyWith(roomStages: loadedStages, unlockedRoomIds: loadedUnlocks);
   }
 
   // Veriyi kalıcı olarak kaydet
   Future<void> _saveToDisk() async {
     final prefs = await SharedPreferences.getInstance();
-    List<String> dataToSave = state.roomStages.entries
+
+    // Stage bilgilerini kaydet
+    List<String> stagesToSave = state.roomStages.entries
         .map((e) => '${e.key}:${e.value}')
         .toList();
-    await prefs.setStringList(_storageKey, dataToSave);
+    await prefs.setStringList(_storageKey, stagesToSave);
+
+    // Kilit açma bilgilerini kaydet
+    await prefs.setStringList(_unlockKey, state.unlockedRoomIds);
   }
 
-// lib/features/library/provider/library_provider.dart
-
   Future<void> upgradeRoom(String roomId) async {
+    // Oda verisini merkezi dosyadan al (Hardcoded 7 yerine dinamik totalStages kullanımı)
+    final roomData = libraryRooms.firstWhere((r) => r['id'] == roomId);
+    final int totalStages = roomData['totalStages'] as int;
+
     final currentStage = state.roomStages[roomId] ?? 0;
-    if (currentStage >= 7) return;
+
+    // 1. Durum Kontrolü: Zaten maksimum seviyede mi?
+    if (currentStage >= totalStages) return;
 
     final cost = getUpgradeCost(roomId, currentStage);
     final gameState = ref.read(gameProvider);
 
+    // 2. Ekonomi Kontrolü
     if (gameState.tokens >= cost) {
-      // Artık spendTokens Future<void> olduğu için await hata vermeyecek
+      // Önce token düş (Future<void> olduğu için await edilir)
       await ref.read(gameProvider.notifier).spendTokens(cost);
 
-      // Kütüphane gelişimini güncelle ve kaydet
+      // Stage artır
       final newStages = Map<String, int>.from(state.roomStages);
       newStages[roomId] = currentStage + 1;
+
       state = state.copyWith(roomStages: newStages);
 
-      await _saveToDisk(); // Kütüphane stage bilgisini kaydet
+      // Değişikliği anında diske yaz
+      await _saveToDisk();
 
-      if (newStages[roomId] == 7) {
+      // 3. Oda Tamamlanma Kontrolü (Bir sonrakini aç)
+      if (newStages[roomId] == totalStages) {
         _unlockNextRoom(roomId);
       }
     }
@@ -79,16 +96,44 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
   }
 
   void _unlockNextRoom(String completedRoomId) {
+    bool stateChanged = false;
+    List<String> currentUnlocks = List.from(state.unlockedRoomIds);
+
     for (var room in libraryRooms) {
       if (room['unlockRequirement'] == completedRoomId) {
         final String nextId = room['id'];
-        if (!state.unlockedRoomIds.contains(nextId)) {
-          state = state.copyWith(unlockedRoomIds: [...state.unlockedRoomIds, nextId]);
-          _saveToDisk();
+        if (!currentUnlocks.contains(nextId)) {
+          currentUnlocks.add(nextId);
+          stateChanged = true;
         }
       }
     }
+
+    if (stateChanged) {
+      state = state.copyWith(unlockedRoomIds: currentUnlocks);
+      _saveToDisk();
+    }
+  }
+
+  bool canAffordAnyUpgrade(int currentTokens) {
+    for (String roomId in state.unlockedRoomIds) {
+      final currentStage = state.roomStages[roomId] ?? 0;
+
+      // Oda verisini bul (max stage kontrolü için)
+      final roomData = libraryRooms.firstWhere((r) => r['id'] == roomId);
+      final int totalStages = roomData['totalStages'] as int;
+
+      if (currentStage < totalStages) {
+        final cost = getUpgradeCost(roomId, currentStage);
+        if (currentTokens >= cost) {
+          return true; // En az bir oda için para yetiyor
+        }
+      }
+    }
+    return false;
   }
 }
+
+
 
 final libraryProvider = StateNotifierProvider<LibraryNotifier, LibraryState>((ref) => LibraryNotifier(ref));

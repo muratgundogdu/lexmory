@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/app_constants.dart';
 
 // Tutorial
+import '../../missions/models/daily_mission.dart';
+import '../../missions/providers/daily_mission_provider.dart';
 import '../../tutorial/models/tutorial_state.dart';
 import '../../tutorial/providers/tutorial_provider.dart';
 
@@ -29,10 +32,14 @@ class GameNotifier extends StateNotifier<GameState> {
   static const String _storageKey = 'lexmory_save_game';
   Timer? _regenTimer;
 
+  // 🎯 BUG 1 ÇÖZÜMÜ: Kelime zaferinin mükerrer tetiklenmesini engelleyen kilit (flag)
+  bool _isWordVictoryProcessed = false;
+
   GameNotifier(this._repository, this._adService, this._ref) : super(_createPlaceholderState()) {
     _init();
     loadTokens();
   }
+
   Future<void> _init() async {
     await _loadFromStorage();
     _checkOfflineRegeneration();
@@ -41,14 +48,14 @@ class GameNotifier extends StateNotifier<GameState> {
 
   // --- TOKEN REGENERATION ---
   void _checkOfflineRegeneration() {
-    if (state.tokens >= 100) return;
+    if (state.tokens >= AppConstants.maxRegenLimit) return;
     final now = DateTime.now();
     final difference = now.difference(state.lastRegenTime);
-    if (difference.inSeconds >= 600) {
-      int cycles = (difference.inSeconds / 600).floor();
-      int totalRegen = cycles * 5;
-      int newTokens = (state.tokens + totalRegen).clamp(0, 100);
-      DateTime updatedRegenTime = state.lastRegenTime.add(Duration(seconds: cycles * 600));
+    if (difference.inSeconds >= AppConstants.regenInterval.inSeconds) {
+      int cycles = (difference.inSeconds / AppConstants.regenInterval.inSeconds).floor();
+      int totalRegen = cycles * AppConstants.regenAmount;
+      int newTokens = (state.tokens + totalRegen).clamp(0, AppConstants.maxRegenLimit);
+      DateTime updatedRegenTime = state.lastRegenTime.add(Duration(seconds: cycles * AppConstants.regenInterval.inSeconds));
       state = state.copyWith(tokens: newTokens, lastRegenTime: updatedRegenTime);
       _persist();
     }
@@ -95,10 +102,17 @@ class GameNotifier extends StateNotifier<GameState> {
         tokens: state.tokens + rewardAmount,
         showOutOfTokensPanel: false,
         pendingAdReward: 0,
-        hasClaimedDoubleReward: true,
         rewardTrigger: state.rewardTrigger + 1,
       );
       _persist();
+
+      try {
+        _ref.read(dailyMissionProvider.notifier).updateProgress(
+          DailyMissionType.watchAds,
+        );
+      } catch (e) {
+        debugPrint('Error updating daily mission for watchAds: $e');
+      }
     }
   }
 
@@ -114,11 +128,15 @@ class GameNotifier extends StateNotifier<GameState> {
       showGameFinishedPanel: false, totalSolvedWords: 0, totalEarnedTokens: 0,
       showOutOfTokensPanel: false, isOutOfTokensDismissible: false,
       lastRegenTime: DateTime.now(),
+      hasClaimedDoubleReward: false,
+      displayedCategoryBonus: 150,
+      isClaimingDoubleReward: false,
     );
   }
 
   Future<void> _loadFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
+    final savedTokens = prefs.getInt('user_tokens');
     final savedData = prefs.getString(_storageKey);
     final isTutorialCompleted = prefs.getBool('tutorial_completed') ?? false;
 
@@ -126,7 +144,7 @@ class GameNotifier extends StateNotifier<GameState> {
       state = _buildStateForWord(
         word: "ELMA",
         category: "Meyveler",
-        tokens: 300,
+        tokens: savedTokens ?? 300,
         completedCats: [],
         wordIdx: 0,
       );
@@ -137,19 +155,25 @@ class GameNotifier extends StateNotifier<GameState> {
     if (savedData != null) {
       try {
         state = GameState.fromJson(jsonDecode(savedData));
+
+        if (savedTokens != null) {
+          state = state.copyWith(tokens: savedTokens);
+        }
         _checkOfflineRegeneration();
       } catch (e) {
-        state = _createInitialState(_repository);
+        state = _createInitialState(_repository, existingTokens: savedTokens);
       }
     } else {
-      state = _createInitialState(_repository);
+      state = _createInitialState(_repository, existingTokens: savedTokens);
     }
+
     _persist();
   }
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, jsonEncode(state.toJson()));
+    await prefs.setInt('user_tokens', state.tokens);
   }
 
   static GameState _createInitialState(GameRepository repository, {int? existingTokens, DateTime? lastRegen}) {
@@ -166,6 +190,9 @@ class GameNotifier extends StateNotifier<GameState> {
       wordIdx: 0,
       solvedWords: 0,
       earnedTokens: 0,
+      hasClaimedDoubleReward: false,
+      displayedCategoryBonus: 150,
+      isClaimingDoubleReward: false,
     );
   }
 
@@ -178,12 +205,13 @@ class GameNotifier extends StateNotifier<GameState> {
 
     final tut = _ref.read(tutorialProvider);
 
-    // BULDUM butonuna bastıktan 1 saniye sonra Tekrar (Reveal) Tanıtımı başlar
     if (tut.phase == TutorialPhase.contextual &&
         tut.hintClearTutorialShown &&
         !tut.revealTutorialShown &&
         !tut.isTutorialActive &&
         state.category != "Meyveler") {
+      state = state.copyWith(tutorialLock: true);
+      _persist();
       _ref.read(tutorialProvider.notifier).startForcedRevealOnboarding();
     }
   }
@@ -252,26 +280,31 @@ class GameNotifier extends StateNotifier<GameState> {
 
     _persist();
 
-    if (!newFound.contains(null)) {
+    // Eğer kelimede boş yer kalmadıysa ve bu kelime henüz işlenmediyse zaferi tetikle
+    if (!newFound.contains(null) && !_isWordVictoryProcessed) {
       _handleWordVictory();
     }
   }
 
-// lib/features/game/providers/game_provider.dart
-
-// Dönüş tipini void yerine Future<void> yapın
   Future<void> spendTokens(int amount) async {
-    final int currentTokens = state.tokens;
-    final int newTokens = currentTokens - amount;
-
-    // 1. UI'ı anında güncelle
+    final int newTokens = state.tokens - amount;
     state = state.copyWith(tokens: newTokens);
 
-    // 2. DISKE KAYDET
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('user_tokens', newTokens);
+    await _persist();
+  }
 
-    // Persist metodunu da çağırarak genel state kaydını garantiye alın
+  Future<void> addTokens(int amount) async {
+    if (amount <= 0) return;
+    final int newTokens = state.tokens + amount;
+    state = state.copyWith(
+        tokens: newTokens,
+        totalEarnedTokens: state.totalEarnedTokens + amount
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('user_tokens', newTokens);
     await _persist();
   }
 
@@ -284,37 +317,76 @@ class GameNotifier extends StateNotifier<GameState> {
     }
   }
 
-  void doubleRewardWithAd() {
-    // Mevcut ödül kadar (150) ekleme yap
-    state = state.copyWith(
-      tokens: state.tokens + 150,
-      // Reklam izlendiği için butonu gizlemek adına bir flag tutabilirsiniz
-      hasClaimedDoubleReward: true,
-    );
+  Future<void> doubleRewardWithAd() async {
+    if (state.hasClaimedDoubleReward || state.isClaimingDoubleReward) return;
+
+    state = state.copyWith(isClaimingDoubleReward: true);
+    _persist();
+
+    const int adBonusAmount = 150;
+
+    final bool success = await _adService.showRewardedAd();
+
+    if (success) {
+      state = state.copyWith(
+        tokens: state.tokens + adBonusAmount,
+        totalEarnedTokens: state.totalEarnedTokens + adBonusAmount,
+        hasClaimedDoubleReward: true,
+        displayedCategoryBonus: state.displayedCategoryBonus + adBonusAmount,
+        lastRewardTotal: state.lastRewardTotal + adBonusAmount,
+        isClaimingDoubleReward: false,
+      );
+
+      try {
+        _ref.read(dailyMissionProvider.notifier).updateProgress(
+          DailyMissionType.watchAds,
+        );
+      } catch (e) {
+        debugPrint('Error updating daily mission for watchAds in doubleRewardWithAd: $e');
+      }
+    } else {
+      state = state.copyWith(isClaimingDoubleReward: false);
+    }
+    _persist();
   }
 
-  void resetDoubleReward() {
-    state = state.copyWith(hasClaimedDoubleReward: false);
+  void resetCategoryCompletionStates() {
+    state = state.copyWith(
+      hasClaimedDoubleReward: false,
+      displayedCategoryBonus: 150,
+      isClaimingDoubleReward: false,
+    );
+    _persist();
   }
 
   void _handleWrongSelection(int gridIdx) async {
     final tut = _ref.read(tutorialProvider);
-    // KRİTİK DEĞİŞİKLİK: Eğer token tanıtımı henüz gösterilmediyse ve
-    // eğitim kategorisinde değilsek (Gerçek oyunun ilk hatasıysa) token düşme.
     final bool isFirstRealError = !tut.tokenTutorialShown && state.category != "Meyveler";
     final int tokenDeduction = isFirstRealError ? 0 : 5;
 
     HapticFeedback.mediumImpact();
 
     state = state.copyWith(
-      // Sadece tanıtım yapıldıysa 5 token eksiltir
       tokens: max(0, state.tokens - tokenDeduction),
       lastAttemptIndex: gridIdx,
       isLastAttemptCorrect: false,
       wrongAttemptsCount: state.wrongAttemptsCount + 1,
       totalCategoryWrongCount: state.totalCategoryWrongCount + 1,
-      streak: 0, // Hata yapınca seri her zaman bozulur
+      streak: 0, // Anlık seri bozuldu
     );
+
+    // 🎯 YENİ: Seri bozulduğu için günlük görevin iç sayacına sıfırlama sinyali yolluyoruz
+    try {
+      _ref.read(dailyMissionProvider.notifier).updateProgress(
+        DailyMissionType.reachStreak,
+        amount: -1, // 🚨 Görev sayacını sıfırla sinyali!
+      );
+    } catch (e) {
+      debugPrint('Error resetting daily mission streak progress: $e');
+    }
+
+    // 🎯 BUG 2 ÇÖZÜMÜ: Seri bozulduğunda updateMaxProgress(..., 0) ÇIKARILDI!
+    // Böylece max_streak aşağıya çekilmeyecek, mevcut rekor korunacak.
 
     _checkTokenStatus();
 
@@ -323,12 +395,10 @@ class GameNotifier extends StateNotifier<GameState> {
       state = state.copyWith(lastAttemptIndex: null, isLastAttemptCorrect: null);
     }
 
-    // Token Tanıtımı: İlk yanlışta tetiklenir
     if (tut.hintJokerTutorialCompleted &&
         !tut.tokenTutorialShown &&
         state.category != "Meyveler") {
 
-      // Oyuncunun hatayı görmesi için kısa bir bekleme
       await Future.delayed(const Duration(milliseconds: 400));
 
       if (mounted) {
@@ -340,41 +410,110 @@ class GameNotifier extends StateNotifier<GameState> {
   void _handleWordVictory() async {
     if (_ref.read(tutorialProvider).isTutorialActive) return;
 
+    // Kilit mekanizmasını aktif et, asenkron süreçte mükerrer tetiklenmeyi önle
+    _isWordVictoryProcessed = true;
+
     int currentStreak = state.streak;
     bool isPerfect = state.wrongAttemptsCount == 0 && state.jokersUsedCount == 0;
+    //currentStreak = isPerfect ? (currentStreak + 1).clamp(0, 5) : 0;
+    currentStreak = isPerfect ? (currentStreak + 1) : 0;
+
+    // 🎯 BUG 1 ÇÖZÜMÜ: Gerçek oyun olayında solveWords SADECE 1 kez çağrılır
+    try {
+      _ref.read(dailyMissionProvider.notifier).updateProgress(
+        DailyMissionType.solveWords,
+      );
+    } catch (e) {
+      debugPrint('Error updating daily mission for solveWords: $e');
+    }
+
+    // 🎯 BUG 2 ÇÖZÜMÜ: Seri rekorunu kontrol eden yeni 'updateProgress' çağrısı
+    // (Metot adını 'updateProgress' yaptık ve anlık seriyi 'amount' olarak gönderdik)
+    try {
+      _ref.read(dailyMissionProvider.notifier).updateProgress(
+        DailyMissionType.reachStreak,
+        amount: currentStreak,
+      );
+    } catch (e) {
+      debugPrint('Error updating daily mission for reachStreak: $e');
+    }
+
     if (isPerfect) {
-      currentStreak += 1;
-    } else {
-      currentStreak = 0;
+      try {
+        _ref.read(dailyMissionProvider.notifier).updateProgress(
+          DailyMissionType.solveWithoutWrong,
+        );
+      } catch (e) {
+        debugPrint('Error updating daily mission for solveWithoutWrong: $e');
+      }
+    }
+
+    if (state.jokersUsedCount == 0) {
+      try {
+        _ref.read(dailyMissionProvider.notifier).updateProgress(
+          DailyMissionType.solveWithoutHint,
+        );
+      } catch (e) {
+        debugPrint('Error updating daily mission for solveWithoutHint: $e');
+      }
     }
 
     final reward = RewardCalculator.calculate(
-      streak: currentStreak,
+      streak: min(currentStreak, 5),
       wrongCount: state.wrongAttemptsCount,
       jokerCount: state.jokersUsedCount,
     );
-
-    final int newTotalSolved = state.totalSolvedWords + 1;
-    final int newTotalEarned = state.totalEarnedTokens + reward.total;
 
     final currentCatData = _repository.getCategoryByName(state.category);
     final List<String> words = _repository.getWordsForCategory(currentCatData);
     bool isCategoryLastWord = state.currentWordIndex + 1 >= words.length;
 
     await Future.delayed(const Duration(milliseconds: 1000));
-    if (!mounted) return;
+    if (!mounted) {
+      _isWordVictoryProcessed = false;
+      return;
+    }
 
     if (isCategoryLastWord) {
+      final int kelimeKazanci = reward.total;
+      const int kategoriBonusuTaban = 150;
+      final int toplamKazanc = kelimeKazanci + kategoriBonusuTaban;
+
       state = state.copyWith(
-        tokens: state.tokens + reward.total + 150,
+        tokens: state.tokens + toplamKazanc,
         showCategoryCompletePanel: true,
+        lastRewardTotal: toplamKazanc,
         lastCompletedCategory: state.category,
         streak: currentStreak,
-        totalSolvedWords: newTotalSolved,
-        totalEarnedTokens: newTotalEarned + 150,
+        totalSolvedWords: state.totalSolvedWords + 1,
+        totalEarnedTokens: state.totalEarnedTokens + toplamKazanc,
         completedCategories: [...state.completedCategories, state.category],
+        hasClaimedDoubleReward: false,
+        displayedCategoryBonus: kategoriBonusuTaban,
+        isClaimingDoubleReward: false,
       );
-      _persist();
+      await _persist();
+
+      try {
+        _ref.read(dailyMissionProvider.notifier).updateProgress(
+          DailyMissionType.earnTokens,
+          amount: toplamKazanc,
+        );
+      } catch (e) {
+        debugPrint('Error updating daily mission for earnTokens (category complete): $e');
+      }
+
+      try {
+        _ref.read(dailyMissionProvider.notifier).updateProgress(
+          DailyMissionType.completeCategories,
+        );
+      } catch (e) {
+        debugPrint('Error updating daily mission for completeCategories: $e');
+      }
+
+      // Kilidi yeni kelime döngüsünde açılmak üzere sıfırla
+      _isWordVictoryProcessed = false;
+
     } else {
       state = state.copyWith(
         showVictoryPanel: true,
@@ -382,27 +521,40 @@ class GameNotifier extends StateNotifier<GameState> {
         tokens: state.tokens + reward.total,
         streak: currentStreak,
         rewardTrigger: state.rewardTrigger + 1,
-        totalSolvedWords: newTotalSolved,
-        totalEarnedTokens: newTotalEarned,
+        totalSolvedWords: state.totalSolvedWords + 1,
+        totalEarnedTokens: state.totalEarnedTokens + reward.total,
       );
-      _persist();
+      await _persist();
+
+      try {
+        _ref.read(dailyMissionProvider.notifier).updateProgress(
+          DailyMissionType.earnTokens,
+          amount: reward.total,
+        );
+      } catch (e) {
+        debugPrint('Error updating daily mission for earnTokens (word victory): $e');
+      }
 
       await Future.delayed(const Duration(milliseconds: 4000));
-      if (!mounted) return;
+      if (!mounted) {
+        _isWordVictoryProcessed = false;
+        return;
+      }
       state = state.copyWith(showVictoryPanel: false);
+
+      // Kilidi kaldır ve bir sonraki kelimeyi yükle
+      _isWordVictoryProcessed = false;
       _loadNextWord();
     }
   }
 
   // --- JOKERS ---
-  // --- HARF AÇ JOKERİ ---
   Future<void> useHint() async {
     if (state.tutorialLock) return;
     final tutorialController = _ref.read(tutorialProvider.notifier);
     final tutorialState = _ref.read(tutorialProvider);
     final bool isForced = tutorialState.currentStep == TutorialStep.forcedHint;
 
-    // Koruma: Tutorial aktifse ve doğru adımda değilsek işlem yapma
     if (tutorialState.isTutorialActive && !isForced) return;
 
     final bool isFree = isForced || (!tutorialState.freeHintUsed && state.category != "Meyveler");
@@ -427,25 +579,23 @@ class GameNotifier extends StateNotifier<GameState> {
 
     if (gridIdx != -1) {
       if (isForced) {
-        // 1. Karartmayı anında kaldır (Harf animasyonu net görünsün)
         tutorialController.completeJokerStep('hint_joker_tutorial_completed');
       }
 
-      // 2. Harf animasyonunu başlat
       state = state.copyWith(lastAttemptIndex: gridIdx, isLastAttemptCorrect: true);
       await Future.delayed(const Duration(milliseconds: 800));
 
       _handleCorrectSelection(gridIdx, nextTargetIndex, char);
 
-      // 3. Token ve Sayaç güncelle
       state = state.copyWith(
         tokens: state.tokens - cost,
         jokersUsedCount: state.jokersUsedCount + 1,
         totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
       );
 
+      // 🎯 BUG 1 ÇÖZÜMÜ: Joker kullanımında solveWords tetikleyen hatalı kod SİLİNDİ!
+
       if (isForced) {
-        // 4. Harf yerleşti, 1.5 saniye bekle ve Yanlış Sil'e geç (Gecikme tutorial_provider'da)
         await tutorialController.nextStepWithDelay(animationDuration: Duration.zero);
       }
       _persist();
@@ -477,7 +627,6 @@ class GameNotifier extends StateNotifier<GameState> {
 
     if (toEliminate.isNotEmpty) {
       if (isForced) {
-        // Spotlight'ı kapat
         tutorialController.completeJokerStep('remove_joker_tutorial_completed');
       }
 
@@ -488,8 +637,9 @@ class GameNotifier extends StateNotifier<GameState> {
         totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
       );
 
+      // 🎯 BUG 1 ÇÖZÜMÜ: Joker kullanımında solveWords tetikleyen hatalı kod SİLİNDİ!
+
       if (isForced) {
-        // Harfler silindi, tutorial_provider 1 saniye bekleyip tutorial'ı sonlandıracak
         await tutorialController.nextStepWithDelay(animationDuration: const Duration(milliseconds: 1000));
       }
       _persist();
@@ -512,7 +662,6 @@ class GameNotifier extends StateNotifier<GameState> {
     }
 
     if (isForced) {
-      // Spotlight'ı kapat
       tutorialController.completeJokerStep('reveal_tutorial_shown');
     }
 
@@ -520,10 +669,13 @@ class GameNotifier extends StateNotifier<GameState> {
       tokens: state.tokens - cost,
       isInitialReveal: true,
       jokersUsedCount: state.jokersUsedCount + 1,
+      totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
+      tutorialLock: isForced ? false : state.tutorialLock,
     );
     _persist();
 
-    // Kartlar 4 saniye açık kalır
+    // 🎯 BUG 1 ÇÖZÜMÜ: Joker kullanımında solveWords tetikleyen hatalı kod SİLİNDİ!
+
     await Future.delayed(const Duration(seconds: 4));
 
     if (mounted) {
@@ -531,7 +683,6 @@ class GameNotifier extends StateNotifier<GameState> {
       _persist();
 
       if (isForced) {
-        // Kartlar kapandı, 1 saniye bekle ve "Artık Hazırsın"a geç
         await Future.delayed(const Duration(seconds: 1));
         tutorialController.nextStep();
       }
@@ -551,9 +702,14 @@ class GameNotifier extends StateNotifier<GameState> {
         completedCats: state.completedCategories,
         wordIdx: state.currentWordIndex + 1,
         streak: state.streak,
+        totalWrong: state.totalCategoryWrongCount,
+        totalJokers: state.totalCategoryJokersCount,
         solvedWords: state.totalSolvedWords,
         earnedTokens: state.totalEarnedTokens,
         lastRegen: state.lastRegenTime,
+        hasClaimedDoubleReward: state.hasClaimedDoubleReward,
+        displayedCategoryBonus: state.displayedCategoryBonus,
+        isClaimingDoubleReward: state.isClaimingDoubleReward,
       );
     } else {
       final currentCompleted = [...state.completedCategories, state.category];
@@ -569,6 +725,9 @@ class GameNotifier extends StateNotifier<GameState> {
         solvedWords: state.totalSolvedWords,
         earnedTokens: state.totalEarnedTokens,
         lastRegen: state.lastRegenTime,
+        hasClaimedDoubleReward: false,
+        displayedCategoryBonus: 150,
+        isClaimingDoubleReward: false,
       );
     }
     _persist();
@@ -585,17 +744,24 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   void startNextCategory() {
-    state = state.copyWith(showCategoryCompletePanel: false, totalCategoryWrongCount: 0, totalCategoryJokersCount: 0);
+    state = state.copyWith(
+      showCategoryCompletePanel: false,
+      totalCategoryWrongCount: 0,
+      totalCategoryJokersCount: 0,
+    );
+    resetCategoryCompletionStates();
     _loadNextWord();
   }
 
   void resetGame() {
     state = _createInitialState(_repository, existingTokens: state.tokens, lastRegen: state.lastRegenTime);
+    resetCategoryCompletionStates();
     _persist();
   }
 
   void resetGameForTutorial() {
     state = _buildStateForWord(word: "ELMA", category: "Meyveler", tokens: 300, completedCats: [], wordIdx: 0);
+    resetCategoryCompletionStates();
     _persist();
   }
 
@@ -604,6 +770,9 @@ class GameNotifier extends StateNotifier<GameState> {
     required List<String> completedCats, required int wordIdx,
     int streak = 0, int totalWrong = 0, int totalJokers = 0,
     int rewardTrigger = 0, int solvedWords = 0, int earnedTokens = 0, DateTime? lastRegen,
+    bool hasClaimedDoubleReward = false,
+    int displayedCategoryBonus = 150,
+    bool isClaimingDoubleReward = false,
   }) {
     const alphabet = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ";
     final List<String> letters = word.toUpperCase().split('');
@@ -649,6 +818,9 @@ class GameNotifier extends StateNotifier<GameState> {
       totalCategoryJokersCount: totalJokers, rewardTrigger: rewardTrigger,
       totalEarnedTokens: earnedTokens, showOutOfTokensPanel: false,
       isOutOfTokensDismissible: false, lastRegenTime: lastRegen ?? DateTime.now(),
+      hasClaimedDoubleReward: hasClaimedDoubleReward,
+      displayedCategoryBonus: displayedCategoryBonus,
+      isClaimingDoubleReward: isClaimingDoubleReward,
     );
   }
 }

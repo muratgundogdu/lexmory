@@ -31,7 +31,7 @@ final categories = [
     "difficulty": 1,
     "progressionScore": 104.75,
     "category": "Hayvanlar",
-    "words": ["ASLAN", "KAPLAN", "FİL", "ZEBRA", "AYI", "KURT", "MAYMUN", "TAVŞAN"],
+    "words": ["ASLAN", "KAPLAN", "FİL","KEDİ","PANDA","TAVŞAN","KÖPEK"],
   },
   {
     "id": 11,

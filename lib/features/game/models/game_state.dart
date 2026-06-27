@@ -50,7 +50,7 @@ class GameState {
   final bool showGameFinishedPanel;
   final bool isOutOfTokensDismissible;
   final bool letterJustSettled;
-  final bool tutorialLock; // YENİ EKLENDİ
+  final bool tutorialLock;
 
   // Ekonomi ve Puanlama
   final int tokens;
@@ -77,9 +77,13 @@ class GameState {
   final int totalSolvedWords;
   final int totalEarnedTokens;
 
-  final bool hasClaimedDoubleReward; // Bu satırı ekle
+  // Reklam ve Ödül Durumları
+  final bool hasClaimedDoubleReward; // Mevcut
+  final int pendingAdReward;
 
-  final int pendingAdReward; // Eklenen satır
+  // YENİ EKLENEN ALANLAR
+  final int displayedCategoryBonus; // UI'da gösterilen kategori bonusu (150 veya 300)
+  final bool isClaimingDoubleReward; // x2 reklamın şu anda izlenip izlenmediğini belirtir (loading UI)
 
   const GameState({
     required this.category,
@@ -108,15 +112,18 @@ class GameState {
     required this.isOutOfTokensDismissible,
     required this.lastRegenTime,
     this.letterJustSettled = false,
-    this.tutorialLock = false, // Constructor'a eklendi
+    this.tutorialLock = false,
     this.lastAttemptIndex,
     this.isLastAttemptCorrect,
     this.justFoundIndex,
     this.rewardTrigger = 0,
     this.lastReward,
     this.lastCompletedCategory,
-    this.pendingAdReward = 0, // Default 0
-    this.hasClaimedDoubleReward = false, // Varsayılan değer false
+    this.pendingAdReward = 0,
+    this.hasClaimedDoubleReward = false, // Mevcut
+    // YENİ ALANLAR İÇİN BAŞLANGIÇ DEĞERLERİ
+    this.displayedCategoryBonus = 150, // Varsayılan olarak 150
+    this.isClaimingDoubleReward = false,
   });
 
   GameState copyWith({
@@ -152,9 +159,12 @@ class GameState {
     bool? isOutOfTokensDismissible,
     DateTime? lastRegenTime,
     bool? letterJustSettled,
-    bool? tutorialLock, // copyWith'e eklendi
+    bool? tutorialLock,
     int? pendingAdReward,
-    bool? hasClaimedDoubleReward, // Buraya ekle
+    bool? hasClaimedDoubleReward,
+    // YENİ ALANLAR İÇİN copyWith PARAMETRELERİ
+    int? displayedCategoryBonus,
+    bool? isClaimingDoubleReward,
   }) {
     return GameState(
       category: category ?? this.category,
@@ -184,14 +194,17 @@ class GameState {
       showOutOfTokensPanel: showOutOfTokensPanel ?? this.showOutOfTokensPanel,
       isOutOfTokensDismissible: isOutOfTokensDismissible ?? this.isOutOfTokensDismissible,
       lastRegenTime: lastRegenTime ?? this.lastRegenTime,
-      lastAttemptIndex: lastAttemptIndex, // Null gelme ihtimaline karşı copyWith'de ?? kullanılmaz
+      lastAttemptIndex: lastAttemptIndex,
       isLastAttemptCorrect: isLastAttemptCorrect,
       justFoundIndex: justFoundIndex,
       lastReward: lastReward ?? this.lastReward,
       letterJustSettled: letterJustSettled ?? this.letterJustSettled,
-      tutorialLock: tutorialLock ?? this.tutorialLock, // Atama yapıldı
+      tutorialLock: tutorialLock ?? this.tutorialLock,
       pendingAdReward: pendingAdReward ?? this.pendingAdReward,
       hasClaimedDoubleReward: hasClaimedDoubleReward ?? this.hasClaimedDoubleReward,
+      // YENİ ALANLARIN copyWith ATAMALARI
+      displayedCategoryBonus: displayedCategoryBonus ?? this.displayedCategoryBonus,
+      isClaimingDoubleReward: isClaimingDoubleReward ?? this.isClaimingDoubleReward,
     );
   }
 
@@ -227,9 +240,13 @@ class GameState {
       'lastRegenTime': lastRegenTime.toIso8601String(),
       'isOutOfTokensDismissible': isOutOfTokensDismissible,
       'letterJustSettled': letterJustSettled,
-      'tutorialLock': tutorialLock, // JSON'a eklendi
+      'tutorialLock': tutorialLock,
       'lastReward': lastReward?.toJson(),
       'pendingAdReward': pendingAdReward,
+      'hasClaimedDoubleReward': hasClaimedDoubleReward,
+      // YENİ ALANLARIN toJson ATAMALARI
+      'displayedCategoryBonus': displayedCategoryBonus,
+      'isClaimingDoubleReward': isClaimingDoubleReward,
     };
   }
 
@@ -262,10 +279,14 @@ class GameState {
       showOutOfTokensPanel: json['showOutOfTokensPanel'] as bool,
       isOutOfTokensDismissible: json['isOutOfTokensDismissible'] as bool,
       letterJustSettled: json['letterJustSettled'] as bool? ?? false,
-      tutorialLock: json['tutorialLock'] as bool? ?? false, // JSON'dan okuma eklendi
+      tutorialLock: json['tutorialLock'] as bool? ?? false,
       lastRegenTime: DateTime.parse(json['lastRegenTime'] as String),
       lastReward: json['lastReward'] != null ? RewardData.fromJson(json['lastReward']) : null,
       pendingAdReward: json['pendingAdReward'] ?? 0,
+      hasClaimedDoubleReward: json['hasClaimedDoubleReward'] as bool? ?? false,
+      // YENİ ALANLARIN fromJson ATAMALARI (eski kayıtlarda olmayabileceği için null check)
+      displayedCategoryBonus: json['displayedCategoryBonus'] as int? ?? 150,
+      isClaimingDoubleReward: json['isClaimingDoubleReward'] as bool? ?? false,
     );
   }
 }

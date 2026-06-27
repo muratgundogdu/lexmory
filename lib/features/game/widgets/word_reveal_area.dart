@@ -19,59 +19,70 @@ class WordRevealArea extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return LayoutBuilder(builder: (context, constraints) {
-      final double screenWidth = MediaQuery.of(context).size.width;
+      // MediaQuery yerine constraints.maxWidth kullanmak daha güvenlidir
+      final double availableTotalWidth = constraints.maxWidth;
       final int wordLength = game.targetWord.length;
 
       double boxMargin = AppDimens.s4;
-      double availableWidth = screenWidth - (AppDimens.s16 * 2);
-      double boxWidth = (availableWidth / wordLength) - (boxMargin * 2);
+      // Padding'leri düştükten sonra kalan alan
+      double usableArea = availableTotalWidth - (AppDimens.s16 * 2);
+      double boxWidth = (usableArea / wordLength) - (boxMargin * 2);
 
+      // Sınırları belirle
       if (boxWidth > 48) boxWidth = 48;
       if (boxWidth < 28) boxWidth = 28;
 
       double boxHeight = boxWidth * 1.25;
       double fontSize = boxWidth * 0.65;
 
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(wordLength, (index) {
-          final String? char = game.foundLetters[index];
-          final bool isFilled = char != null;
-          final bool isJustFound = game.justFoundIndex == index;
+      // KRİTİK DÜZELTME: FittedBox ekleyerek taşmayı (overflow) engelliyoruz
+      return Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown, // İçerik büyükse orantılı küçültür, küçükse büyütmez
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min, // FittedBox'ın doğru çalışması için min olmalı
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(wordLength, (index) {
+              final String? char = game.foundLetters[index];
+              final bool isFilled = char != null;
+              final bool isJustFound = game.justFoundIndex == index;
 
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            key: (boxKeys != null && index < boxKeys!.length) ? boxKeys![index] : null,
-            width: boxWidth,
-            height: boxHeight,
-            margin: EdgeInsets.symmetric(horizontal: boxMargin),
-            decoration: BoxDecoration(
-              color: isFilled
-                  ? AppColors.surfaceElevated
-                  : AppColors.surface.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
-              border: Border.all(
-                color: isJustFound
-                    ? AppColors.primary
-                    : (isFilled ? AppColors.primary.withValues(alpha: 0.4) : AppColors.border),
-                width: isJustFound ? 2.0 : 1.5,
-              ),
-              boxShadow: isFilled
-                  ? [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: isJustFound ? 0.2 : 0.1),
-                  blurRadius: isJustFound ? 15 : 8,
-                )
-              ]
-                  : [],
-            ),
-            alignment: Alignment.center,
-            child: isFilled
-                ? _buildLetter(char, fontSize, isJustFound) // char String? olmasına rağmen isFilled kontrolü var
-                : _buildEmptyPlaceholder(),
-          );
-        }),
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                key: (boxKeys != null && index < boxKeys!.length) ? boxKeys![index] : null,
+                width: boxWidth,
+                height: boxHeight,
+                margin: EdgeInsets.symmetric(horizontal: boxMargin),
+                decoration: BoxDecoration(
+                  color: isFilled
+                      ? AppColors.surfaceElevated
+                      : AppColors.surface.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
+                  border: Border.all(
+                    color: isJustFound
+                        ? AppColors.primary
+                        : (isFilled ? AppColors.primary.withValues(alpha: 0.4) : AppColors.border),
+                    width: isJustFound ? 2.0 : 1.5,
+                  ),
+                  boxShadow: isFilled
+                      ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: isJustFound ? 0.2 : 0.1),
+                      blurRadius: isJustFound ? 15 : 8,
+                    )
+                  ]
+                      : [],
+                ),
+                alignment: Alignment.center,
+                child: isFilled
+                    ? _buildLetter(char, fontSize, isJustFound)
+                    : _buildEmptyPlaceholder(),
+              );
+            }),
+          ),
+        ),
       );
     });
   }
@@ -88,9 +99,8 @@ class WordRevealArea extends ConsumerWidget {
             : null,
       ),
     )
-    // DÜZELTME: isFilled olduğu sürece target her zaman 1 olmalı.
         .animate(target: 1)
-        .fadeIn(duration: isJustFound ? 150.ms : 0.ms) // Sadece yeni geliyorsa fade olsun
+        .fadeIn(duration: isJustFound ? 150.ms : 0.ms)
         .scale(
       begin: isJustFound ? const Offset(0.8, 0.8) : const Offset(1, 1),
       end: const Offset(1.0, 1.0),
@@ -98,7 +108,6 @@ class WordRevealArea extends ConsumerWidget {
       curve: Curves.easeOutBack,
     )
         .shimmer(
-      // Sadece yeni bulunca parlasın
       duration: isJustFound ? 400.ms : 0.ms,
       color: AppColors.primaryLight.withValues(alpha: 0.3),
     );

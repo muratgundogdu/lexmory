@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../game/providers/game_provider.dart';
 import '../provider/library_provider.dart';
+import '../widgets/room_stage_reveal.dart';
 import '../../../data/library_rooms.dart';
 
 class RoomDetailScreen extends ConsumerStatefulWidget {
@@ -15,109 +16,116 @@ class RoomDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<RoomDetailScreen> createState() => _RoomDetailScreenState();
 }
 
-class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
+class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
+    with SingleTickerProviderStateMixin {
   bool isUpgrading = false;
   String upgradeStatusText = "";
+  int? _revealFromStage;
 
-  final List<String> stageActionNames = [
-    "Zemin Hazırlanıyor",
-    "Raflar Montajlanıyor",
-    "Kitaplar Yerleştiriliyor",
-    "Çalışma Masası Kuruluyor",
-    "Aydınlatmalar Takılıyor",
-    "Halı Seriliyor",
-    "Bitkiler Yerleştiriliyor",
-    "Dekorasyon Tamamlanıyor",
-  ];
+  late final AnimationController _revealController;
+
+  // UI animasyonu için kullanılan aksiyon metinleri
+  @override
+  void initState() {
+    super.initState();
+    _revealController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+  }
+
+  @override
+  void dispose() {
+    _revealController.dispose();
+    super.dispose();
+  }
 
   Future<void> _handleUpgrade(int currentStage) async {
     if (isUpgrading) return;
 
-    // 1. Maliyeti ve Bakiyeyi Kontrol Et
     final cost = ref.read(libraryProvider.notifier).getUpgradeCost(widget.roomId, currentStage);
     final gameState = ref.read(gameProvider);
 
     if (gameState.tokens < cost) return;
 
-    // 2. Animasyonu Başlat
+    // 1. DATA DOSYASINDAN ODA VERİSİNİ VE ADIM İSİMLERİNİ ALIYORUZ
+    final roomData = libraryRooms.firstWhere((r) => r['id'] == widget.roomId);
+    final List<String> stageTitles = List<String>.from(roomData['stageTitles']);
+
+    // 2. SABİT LİSTE YERİNE DATA DOSYASINDAKİ İSMİ KONTROL EDİYORUZ
+    final actionText = currentStage < stageTitles.length
+        ? stageTitles[currentStage]
+        : "Geliştiriliyor";
+
     setState(() {
       isUpgrading = true;
-      upgradeStatusText = "SIRA SENDE!";
+      upgradeStatusText = "$actionText...".toUpperCase();
     });
 
     HapticFeedback.mediumImpact();
-    await Future.delayed(800.ms);
-
-    // 3. Provider Üzerinden Geliştirmeyi Yap (Token düşme ve Stage artırma bu metodun içinde)
-    // LibraryNotifier içindeki upgradeRoom artık SharedPreferences kaydı da yapıyor.
-    ref.read(libraryProvider.notifier).upgradeRoom(widget.roomId);
-
-    HapticFeedback.lightImpact();
-    setState(() => upgradeStatusText = "SIRA SENDE!");
-
     await Future.delayed(700.ms);
     if (!mounted) return;
 
+    final int fromStage = currentStage;
+
+    setState(() {
+      _revealFromStage = fromStage;
+      upgradeStatusText = "TAMAMLANDI!";
+    });
+
+    HapticFeedback.lightImpact();
+
+    // 3. ANİMASYONU BAŞLATIYORUZ (Görsel efektler ekranda oynatılıyor)
+    await _revealController.forward(from: 0);
+    if (!mounted) return;
+
+    // 4. ANİMASYON BİTTİKTEN SONRA STATE'İ GÜNCELLİYORUZ VE PARAYI DÜŞÜYORUZ
+    // Böylece alt paneldeki yazılar ve maliyetler animasyon sırasında erkenden zıplamıyor.
+    ref.read(libraryProvider.notifier).upgradeRoom(widget.roomId);
+
     setState(() {
       isUpgrading = false;
+      _revealFromStage = null;
       upgradeStatusText = "";
     });
+    _revealController.reset();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Stage bilgisini LibraryProvider'dan izle (watch)
     final libraryState = ref.watch(libraryProvider);
     final libraryNotifier = ref.read(libraryProvider.notifier);
-
-    // Token bilgisini ana GameProvider'dan izle (watch)
     final gameState = ref.watch(gameProvider);
-    final int playerTokens = gameState.tokens;
 
-    // Mevcut odanın verilerini ve stage bilgisini al
     final roomData = libraryRooms.firstWhere((r) => r['id'] == widget.roomId);
+    final int totalStages = roomData['totalStages'] as int;
     final int currentStageIndex = libraryState.roomStages[widget.roomId] ?? 0;
-    final bool isMaxStage = currentStageIndex >= 7;
+    final bool isMaxStage = currentStageIndex >= totalStages;
 
     int nextUpgradeCost = 0;
     bool canAfford = false;
 
     if (!isMaxStage) {
       nextUpgradeCost = libraryNotifier.getUpgradeCost(widget.roomId, currentStageIndex);
-      // Bakiye kontrolü - >= operatörü ile tam tutar kontrolü
-      canAfford = playerTokens >= nextUpgradeCost;
+      canAfford = gameState.tokens >= nextUpgradeCost;
     }
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 1. ARKA PLAN: TAM EKRAN ODA GÖRSELİ
+          // 1. TAM EKRAN ODA — önceki stage sabit, yeni öğe üzerine yerleşir
           Positioned.fill(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 800),
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 1.05, end: 1.0).animate(
-                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                    ),
-                    child: child,
-                  ),
-                );
-              },
-              child: Image.asset(
-                'lib/assets/library/${widget.roomId}/room_stage_$currentStageIndex.png',
-                key: ValueKey('room_img_$currentStageIndex'),
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-              ),
+            child: RoomStageReveal(
+              roomId: widget.roomId,
+              stageIndex: currentStageIndex,
+              revealFromStage: _revealFromStage,
+              revealAnimation: _revealController,
+              showSparkles: _revealFromStage != null,
             ),
           ),
 
-          // 2. GÖRSEL ÜZERİ KARARTMA (Okunabilirlik için)
+          // 2. OKUNABİLİRLİK GRADIENTI
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -136,19 +144,19 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
             ),
           ),
 
-          // 3. ÜST BİLGİ (Kategori adı ve Progress)
+          // 3. ÜST PANEL
           Column(
             children: [
               _buildCompactHeader(roomData['name'] as String),
               const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _buildRefinedProgress(currentStageIndex, 7),
+                child: _buildRefinedProgress(currentStageIndex, totalStages),
               ),
             ],
           ),
 
-          // 4. ALT PANEL (Upgrade Kartı)
+          // 4. DOKUNULMAZ: ALT UPGRADE PANELİ
           Positioned(
             left: 0,
             right: 0,
@@ -164,7 +172,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
             ),
           ),
 
-          // 5. UPGRADE EFEKTLERİ (Glow ve Status Popup)
+          // 5. UPGRADE EFEKTLERİ
           if (isUpgrading) _buildGlowOverlay(),
           if (isUpgrading) Center(child: _buildStatusPopup()),
         ],
@@ -173,7 +181,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
   }
 
   Widget _buildRefinedProgress(int current, int total) {
-    double progress = current / total;
+    double progress = (current / total).clamp(0.0, 1.0);
     return Column(
       children: [
         Row(
@@ -209,6 +217,15 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
   }
 
   Widget _buildUpgradePanel(int currentStage, bool canAfford, int cost) {
+    // 1. DATA DOSYASINDAN BU ODANIN VERİLERİNİ VE ADIM İSİMLERİNİ ALIYORUZ
+    final roomData = libraryRooms.firstWhere((r) => r['id'] == widget.roomId);
+    final List<String> stageTitles = List<String>.from(roomData['stageTitles']);
+
+    // 2. ESKİ LİSTE YERİNE DATA DOSYASINDAKİ LİSTEYE GÖRE KONTROL EDİYORUZ
+    String nextStepTitle = (currentStage < stageTitles.length)
+        ? stageTitles[currentStage]
+        : "SON DOKUNUŞLAR";
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -224,7 +241,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
               style: GoogleFonts.outfit(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
           const SizedBox(height: 4),
           Text(
-            stageActionNames[currentStage + 1].toUpperCase(),
+            nextStepTitle.toUpperCase(),
             style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
@@ -301,13 +318,10 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
     child: Container(
       decoration: BoxDecoration(
         gradient: RadialGradient(
-          colors: [
-            const Color(0xFFCEA14F).withOpacity(0.3),
-            Colors.transparent,
-          ],
+          colors: [const Color(0xFFCEA14F).withOpacity(0.3), Colors.transparent],
         ),
       ),
-    ).animate().fadeIn().fadeOut(delay: 800.ms),
+    ).animate().fadeIn().fadeOut(delay: 700.ms),
   );
 
   Widget _buildCompletedArea() {
