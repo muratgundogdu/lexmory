@@ -1,203 +1,297 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/collection_card.dart';
+import '../provider/collection_provider.dart';
+import 'collection_placement_transition.dart';
 
-class PureImageCard extends StatelessWidget {
+class PureImageCard extends ConsumerStatefulWidget {
   final CollectionCard card;
   final bool isOwned;
+  final bool isMistikMode;
+  final bool isNewlyUnlocked;
+  final Duration staggerDelay;
 
   const PureImageCard({
     super.key,
     required this.card,
     required this.isOwned,
+    this.isMistikMode = false,
+    this.isNewlyUnlocked = false,
+    this.staggerDelay = Duration.zero,
   });
 
   @override
+  ConsumerState<PureImageCard> createState() => _PureImageCardState();
+}
+
+class _PureImageCardState extends ConsumerState<PureImageCard> {
+  static _CardThemeColors get _lockedTheme => _CardThemeColors(
+        borderColor: Colors.white.withValues(alpha: 0.08),
+        glowColor: Colors.transparent,
+        bgGlowColor: Colors.white.withValues(alpha: 0.03),
+      );
+
+  static _CardThemeColors get _legendaryTheme => _CardThemeColors(
+        borderColor: const Color(0xFFFFD275),
+        glowColor: const Color(0xFFFFD275).withValues(alpha: 0.22),
+        bgGlowColor: const Color(0xFFFFD275).withValues(alpha: 0.14),
+      );
+
+  static _CardThemeColors get _epicTheme => _CardThemeColors(
+        borderColor: const Color(0xFF9D85FF),
+        glowColor: const Color(0xFF9D85FF).withValues(alpha: 0.2),
+        bgGlowColor: const Color(0xFF4C3BA8).withValues(alpha: 0.25),
+      );
+
+  static _CardThemeColors get _commonTheme => _CardThemeColors(
+        borderColor: const Color(0xFFCD7F32).withValues(alpha: 0.7),
+        glowColor: Colors.black26,
+        bgGlowColor: Colors.black45,
+      );
+
+  _CardThemeColors _getCardTheme(int stars, bool owned, bool mistik) {
+    if (!owned) return _lockedTheme;
+    
+    _CardThemeColors theme;
+    if (stars == 3) {
+      theme = _legendaryTheme;
+    } else if (stars == 2) {
+      theme = _epicTheme;
+    } else {
+      theme = _commonTheme;
+    }
+
+    if (mistik) {
+      return _CardThemeColors(
+        borderColor: theme.borderColor,
+        glowColor: theme.glowColor.withValues(alpha: theme.glowColor.a * 1.5),
+        bgGlowColor: theme.bgGlowColor,
+      );
+    }
+    return theme;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Nadirlik seviyelerine göre Premium Renk Paletleri
-    final cardTheme = _getCardTheme(card.stars, isOwned);
+    final cardTheme = _getCardTheme(widget.card.stars, widget.isOwned, widget.isMistikMode);
+
+    // Common Base for Slot/Background
+    final slotBase = Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E22),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: widget.isOwned ? cardTheme.borderColor : _lockedTheme.borderColor,
+          width: widget.isOwned ? 2.0 : 1.0,
+        ),
+      ),
+    );
+
+    // Owned Content (The full card as it looks now)
+    final ownedContent = _buildFullCard(isLocked: false, cardTheme: cardTheme);
+
+    // Locked Content (The grayed out card)
+    final lockedContent = _buildFullCard(isLocked: true, cardTheme: _lockedTheme);
+
+    // If it's already owned and NOT newly unlocked, just show ownedContent
+    if (widget.isOwned && !widget.isNewlyUnlocked) {
+      return AspectRatio(aspectRatio: 0.72, child: ownedContent);
+    }
+
+    // If it's NOT owned, just show lockedContent
+    if (!widget.isOwned) {
+      return AspectRatio(aspectRatio: 0.72, child: lockedContent);
+    }
+
+    // Incoming Artwork (Just the image for animation)
+    final incomingArtwork = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 28),
+      child: Image.asset(
+        widget.card.imagePath,
+        fit: BoxFit.contain,
+      ),
+    );
 
     return AspectRatio(
-      aspectRatio: 0.72, // Altın kart oranı
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF141416), // Çok koyu şık bir kart tabanı
-          borderRadius: BorderRadius.circular(18),
-
-          // 1. Çerçeve: Nadirlik rengine göre dinamik parlayan ince şerit
-          border: Border.all(
-            color: cardTheme.borderColor,
-            width: isOwned ? 2.0 : 1.0,
-          ),
-
-          // 2. Neon Işıma (Glow Efekti): Kartın arkasından dışarı taşan büyülü gölge
-          boxShadow: [
-            BoxShadow(
-              color: cardTheme.glowColor,
-              blurRadius: isOwned ? 14 : 4,
-              spreadRadius: isOwned ? 1 : 0,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-
-            // 3. Arka Plan: Kartın içinden dışarı doğru patlayan mistik radyal ışık
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    colors: [
-                      cardTheme.bgGlowColor,
-                      const Color(0xFF101012),
-                    ],
-                    radius: 0.75,
-                  ),
-                ),
-              ),
-            ),
-
-            // 4. Kartın Esas Görseli Alanı
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 28), // Alt kısımda yazı için yer bırakıyoruz
-                child: isOwned
-                    ? Image.asset(
-                  card.imagePath,
-                  fit: BoxFit.contain,
-                )
-                    : Image.asset(
-                  // 🔥 YENİ: Kart açılmadıysa görünecek o gizemli ortak placeholder görseli
-                  'lib/assets/cards/locked_card_placeholder.png',
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    // Eğer yeni kilitli kart görselini henüz asset'e eklemediysen proje çökmez, eski kilit ikonunu tam ortada basar.
-                    return Center(
-                      child: Icon(
-                        Icons.lock_outline_rounded,
-                        size: 36,
-                        color: Colors.white.withOpacity(0.12),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-
-            // 5. Kart İsmi Panel Gölgeliği ve Yazısı
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.85),
-                      Colors.black.withOpacity(0.4),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: Text(
-                  isOwned ? card.name : '???', // Kilitliyse gizem katmak için ??? yazmaya devam
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    color: isOwned ? Colors.white : Colors.white38,
-                    fontSize: 11,
-                    fontWeight: isOwned ? FontWeight.bold : FontWeight.w500,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-            ),
-
-            // 6. Üst Kısımdaki Şık Yıldız Kapsülü
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.45),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(
-                    card.stars,
-                        (index) => Padding(
-                      padding: const EdgeInsets.only(right: 1.0),
-                      child: Icon(
-                        Icons.star_rounded,
-                        size: 10,
-                        color: isOwned ? const Color(0xFFFFD275) : Colors.white24,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // 7. Kilitli Kartlar İçin Sağ Üst Köşedeki Zarif Küçük Kilit İkonu
-            if (!isOwned)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Icon(
-                  Icons.lock_rounded,
-                  color: Colors.white24,
-                  size: 14,
-                ),
-              ),
-          ],
-        ),
+      aspectRatio: 0.72,
+      child: CollectionPlacementTransition(
+        slot: slotBase,
+        lockedContent: lockedContent,
+        ownedContent: ownedContent,
+        incomingArtwork: incomingArtwork,
+        shouldAnimate: widget.isNewlyUnlocked,
+        staggerDelay: widget.staggerDelay,
+        onCompleted: () {
+          if (mounted) {
+            ref.read(collectionProvider.notifier).markCardAsSeen(widget.card.id);
+          }
+        },
       ),
     );
   }
 
-  // Temayı dinamik olarak besleyen yardımcı fonksiyonumuz
-  _CardThemeColors _getCardTheme(int stars, bool owned) {
-    if (!owned) {
-      // Kilitli kartların tamamı mat ve gizemli temada görünür
-      return _CardThemeColors(
-        borderColor: Colors.white.withOpacity(0.08),
-        glowColor: Colors.transparent,
-        bgGlowColor: Colors.white.withOpacity(0.03),
+  Widget _buildFullCard({required bool isLocked, required _CardThemeColors cardTheme}) {
+    final Color dynamicTextColor = isLocked ? Colors.white38 : Colors.white;
+    final FontWeight dynamicFontWeight = isLocked ? FontWeight.w500 : FontWeight.bold;
+    final Color dynamicStarColor = isLocked ? Colors.white24 : const Color(0xFFFFD275);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E22),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: cardTheme.borderColor,
+          width: isLocked ? 1.0 : 2.0,
+        ),
+        boxShadow: !isLocked
+            ? [
+                BoxShadow(
+                  color: cardTheme.glowColor,
+                  blurRadius: 14.0,
+                  spreadRadius: 1.0,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // 1. KATMAN: İç Çerçeve
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFF3F3F46), width: 0.5),
+              ),
+            ),
+          ),
+
+          // 2. KATMAN: Arka Plan Gradient
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    cardTheme.bgGlowColor.withValues(alpha: 0.1),
+                    const Color(0xFF101012),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 3. KATMAN: Esas Görsel
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 16, 12, 28),
+              child: _buildCardImage(isLocked),
+            ),
+          ),
+
+          // 4. KATMAN: Kart İsmi
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withValues(alpha: 0.85), Colors.transparent],
+                ),
+              ),
+              child: Text(
+                isLocked ? '???' : widget.card.name,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  color: dynamicTextColor,
+                  fontSize: 11,
+                  fontWeight: dynamicFontWeight,
+                ),
+              ),
+            ),
+          ),
+
+          // 5. KATMAN: Yıldızlar
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(
+                  widget.card.stars,
+                  (index) => Icon(Icons.star_rounded, size: 10, color: dynamicStarColor),
+                ).expand((w) => [w, const SizedBox(width: 1)]).toList()..removeLast(),
+              ),
+            ),
+          ),
+
+          // 6. KATMAN: Kilit İkonu
+          if (isLocked)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.lock_rounded,
+                  color: Colors.white54,
+                  size: 14,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCardImage(bool isLocked) {
+    Widget image = !isLocked
+        ? Image.asset(
+            widget.card.imagePath,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Center(
+              child: Icon(Icons.broken_image, color: Colors.white24),
+            ),
+          )
+        : Image.asset(
+            'lib/assets/cards/locked_card_placeholder.webp',
+            fit: BoxFit.contain,
+          );
+
+    if (isLocked) {
+      return Opacity(
+        opacity: 0.30,
+        child: ColorFiltered(
+          colorFilter: const ColorFilter.matrix(<double>[
+            0.6, 0, 0, 0, 0,
+            0, 0.6, 0, 0, 0,
+            0, 0, 0.6, 0, 0,
+            0, 0, 0, 1, 0,
+          ]),
+          child: image,
+        ),
       );
     }
 
-    // Açılmış kartların nadirlik seviyelerine göre canlı temaları:
-    if (stars == 3) {
-      // 3 Yıldız: Efsanevi Canlı Altın
-      return _CardThemeColors(
-        borderColor: const Color(0xFFFFD275),
-        glowColor: const Color(0xFFFFD275).withOpacity(0.22),
-        bgGlowColor: const Color(0xFFFFD275).withOpacity(0.14),
-      );
-    } else if (stars == 2) {
-      // 2 Yıldız: Epik Gece Mavisi / Neon Mor
-      return _CardThemeColors(
-        borderColor: const Color(0xFF9D85FF),
-        glowColor: const Color(0xFF9D85FF).withOpacity(0.2),
-        bgGlowColor: const Color(0xFF4C3BA8).withOpacity(0.25),
-      );
-    } else {
-      // 1 Yıldız: Klasik Şık Bronz / Gümüş
-      return _CardThemeColors(
-        borderColor: const Color(0xFFCD7F32).withOpacity(0.7),
-        glowColor: Colors.black26,
-        bgGlowColor: Colors.white10,
-      );
-    }
+    return image;
   }
 }
 
@@ -206,7 +300,7 @@ class _CardThemeColors {
   final Color glowColor;
   final Color bgGlowColor;
 
-  _CardThemeColors({
+  const _CardThemeColors({
     required this.borderColor,
     required this.glowColor,
     required this.bgGlowColor,

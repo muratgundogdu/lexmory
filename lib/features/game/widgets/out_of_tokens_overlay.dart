@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_dimens.dart';
 import '../../../core/app_typography.dart';
+import '../../../core/debug_config.dart';
 
 class OutOfTokensOverlay extends StatelessWidget {
   final bool isVisible;
@@ -31,86 +32,91 @@ class OutOfTokensOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!isVisible) return const SizedBox.shrink();
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-      child: Container(
-        color: AppColors.background.withValues(alpha: 0.85),
-        child: Center(
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 320,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimens.s24,
-                    vertical: AppDimens.s32
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
-                  border: Border.all(color: AppColors.border, width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 40,
-                      offset: const Offset(0, 20),
-                    )
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text("🪙", style: TextStyle(fontSize: AppDimens.iconXL + 12)),
-                    const SizedBox(height: AppDimens.s24),
+    final Widget overlayContent = Container(
+      color: AppColors.background.withValues(alpha: DebugConfig.enableBackdropBlurs ? 0.85 : 0.95),
+      child: Center(
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 320,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimens.s24,
+                  vertical: AppDimens.s32
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
+                border: Border.all(color: AppColors.border, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 40,
+                    offset: const Offset(0, 20),
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("🪙", style: TextStyle(fontSize: AppDimens.iconXL + 12)),
+                  const SizedBox(height: AppDimens.s24),
 
-                    Text(
-                      "TOKENLAR TÜKENDİ",
-                      textAlign: TextAlign.center,
-                      style: AppTypography.pageTitle.copyWith(color: AppColors.primary),
-                    ),
+                  Text(
+                    "TOKENLAR TÜKENDİ",
+                    textAlign: TextAlign.center,
+                    style: AppTypography.pageTitle.copyWith(color: AppColors.primary),
+                  ),
 
-                    const SizedBox(height: AppDimens.s12),
+                  const SizedBox(height: AppDimens.s12),
 
-                    Text(
-                      "Reklam izleyerek anında $rewardAmount token kazanabilirsin.",
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodyMedium,
-                    ),
+                  Text(
+                    "Reklam izleyerek anında $rewardAmount token kazanabilirsin.",
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyMedium,
+                  ),
 
-                    const SizedBox(height: AppDimens.s32),
+                  const SizedBox(height: AppDimens.s32),
 
-                    _buildLexButton(
-                      label: "ÜCRETSİZ TOKEN",
-                      subLabel: "+$rewardAmount TOKEN KAZAN",
-                      icon: Icons.play_arrow_rounded,
-                      isPrimary: true,
-                      onTap: onWatchAd,
-                    ),
+                  _buildLexButton(
+                    label: "ÜCRETSİZ TOKEN",
+                    subLabel: "+$rewardAmount TOKEN KAZAN",
+                    icon: Icons.play_arrow_rounded,
+                    isPrimary: true,
+                    onTap: onWatchAd,
+                  ),
 
-                    const SizedBox(height: AppDimens.s12),
+                  const SizedBox(height: AppDimens.s12),
 
-                    _buildLexButton(
-                      label: "MAĞAZA",
-                      subLabel: "DAHA FAZLASINI AL",
-                      icon: Icons.shopping_bag_outlined,
-                      isPrimary: false,
-                      onTap: onStore,
-                    ),
-                  ],
-                ),
-              ).animate().fade().scale(curve: Curves.easeOutBack),
+                  _buildLexButton(
+                    label: "MAĞAZA",
+                    subLabel: "DAHA FAZLASINI AL",
+                    icon: Icons.shopping_bag_outlined,
+                    isPrimary: false,
+                    onTap: onStore,
+                  ),
+                ],
+              ),
+            ).animate().fade().scale(curve: Curves.easeOutBack),
 
-              if (isDismissible)
-                Positioned(
-                  top: -AppDimens.s12,
-                  right: -AppDimens.s12,
-                  child: _buildCloseButton(),
-                ),
-            ],
-          ),
+            if (isDismissible)
+              Positioned(
+                top: -AppDimens.s12,
+                right: -AppDimens.s12,
+                child: _buildCloseButton(),
+              ),
+          ],
         ),
       ),
     );
+
+    if (DebugConfig.enableBackdropBlurs) {
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: overlayContent,
+      );
+    }
+    return overlayContent;
   }
 
   Widget _buildLexButton({

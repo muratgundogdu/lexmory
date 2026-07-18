@@ -1,3 +1,4 @@
+import '../../library/models/chest_open_result.dart';
 
 /// Ödül detaylarını tutan veri modeli
 class RewardData {
@@ -54,6 +55,8 @@ class GameState {
 
   // Ekonomi ve Puanlama
   final int tokens;
+  final int hintInventory;
+  final int removeWrongInventory;
   final int streak;
   final int lastRewardTotal;
   final int wrongAttemptsCount;
@@ -84,6 +87,7 @@ class GameState {
   // YENİ EKLENEN ALANLAR
   final int displayedCategoryBonus; // UI'da gösterilen kategori bonusu (150 veya 300)
   final bool isClaimingDoubleReward; // x2 reklamın şu anda izlenip izlenmediğini belirtir (loading UI)
+  final ChestOpenResult? categoryRewardResult;
 
   const GameState({
     required this.category,
@@ -94,6 +98,8 @@ class GameState {
     required this.isInitialReveal,
     required this.hasStarted,
     required this.tokens,
+    this.hintInventory = 0,
+    this.removeWrongInventory = 0,
     required this.completedCategories,
     required this.currentWordIndex,
     required this.eliminatedIndices,
@@ -120,10 +126,10 @@ class GameState {
     this.lastReward,
     this.lastCompletedCategory,
     this.pendingAdReward = 0,
-    this.hasClaimedDoubleReward = false, // Mevcut
-    // YENİ ALANLAR İÇİN BAŞLANGIÇ DEĞERLERİ
-    this.displayedCategoryBonus = 150, // Varsayılan olarak 150
+    this.hasClaimedDoubleReward = false,
+    this.displayedCategoryBonus = 150, 
     this.isClaimingDoubleReward = false,
+    this.categoryRewardResult,
   });
 
   GameState copyWith({
@@ -135,6 +141,8 @@ class GameState {
     bool? isInitialReveal,
     bool? hasStarted,
     int? tokens,
+    int? hintInventory,
+    int? removeWrongInventory,
     int? lastAttemptIndex,
     bool? isLastAttemptCorrect,
     int? justFoundIndex,
@@ -162,9 +170,9 @@ class GameState {
     bool? tutorialLock,
     int? pendingAdReward,
     bool? hasClaimedDoubleReward,
-    // YENİ ALANLAR İÇİN copyWith PARAMETRELERİ
     int? displayedCategoryBonus,
     bool? isClaimingDoubleReward,
+    ChestOpenResult? categoryRewardResult,
   }) {
     return GameState(
       category: category ?? this.category,
@@ -175,6 +183,8 @@ class GameState {
       isInitialReveal: isInitialReveal ?? this.isInitialReveal,
       hasStarted: hasStarted ?? this.hasStarted,
       tokens: tokens ?? this.tokens,
+      hintInventory: hintInventory ?? this.hintInventory,
+      removeWrongInventory: removeWrongInventory ?? this.removeWrongInventory,
       completedCategories: completedCategories ?? this.completedCategories,
       currentWordIndex: currentWordIndex ?? this.currentWordIndex,
       eliminatedIndices: eliminatedIndices ?? this.eliminatedIndices,
@@ -202,9 +212,9 @@ class GameState {
       tutorialLock: tutorialLock ?? this.tutorialLock,
       pendingAdReward: pendingAdReward ?? this.pendingAdReward,
       hasClaimedDoubleReward: hasClaimedDoubleReward ?? this.hasClaimedDoubleReward,
-      // YENİ ALANLARIN copyWith ATAMALARI
       displayedCategoryBonus: displayedCategoryBonus ?? this.displayedCategoryBonus,
       isClaimingDoubleReward: isClaimingDoubleReward ?? this.isClaimingDoubleReward,
+      categoryRewardResult: categoryRewardResult ?? this.categoryRewardResult,
     );
   }
 
@@ -220,6 +230,8 @@ class GameState {
       'isInitialReveal': isInitialReveal,
       'hasStarted': hasStarted,
       'tokens': tokens,
+      'hintInventory': hintInventory,
+      'removeWrongInventory': removeWrongInventory,
       'completedCategories': completedCategories,
       'currentWordIndex': currentWordIndex,
       'eliminatedIndices': eliminatedIndices,
@@ -244,7 +256,6 @@ class GameState {
       'lastReward': lastReward?.toJson(),
       'pendingAdReward': pendingAdReward,
       'hasClaimedDoubleReward': hasClaimedDoubleReward,
-      // YENİ ALANLARIN toJson ATAMALARI
       'displayedCategoryBonus': displayedCategoryBonus,
       'isClaimingDoubleReward': isClaimingDoubleReward,
     };
@@ -260,6 +271,8 @@ class GameState {
       isInitialReveal: json['isInitialReveal'] as bool,
       hasStarted: json['hasStarted'] as bool,
       tokens: json['tokens'] as int,
+      hintInventory: json['hintInventory'] as int? ?? 0,
+      removeWrongInventory: json['removeWrongInventory'] as int? ?? 0,
       completedCategories: List<String>.from(json['completedCategories']),
       currentWordIndex: json['currentWordIndex'] as int,
       eliminatedIndices: List<int>.from(json['eliminatedIndices']),
@@ -284,7 +297,6 @@ class GameState {
       lastReward: json['lastReward'] != null ? RewardData.fromJson(json['lastReward']) : null,
       pendingAdReward: json['pendingAdReward'] ?? 0,
       hasClaimedDoubleReward: json['hasClaimedDoubleReward'] as bool? ?? false,
-      // YENİ ALANLARIN fromJson ATAMALARI (eski kayıtlarda olmayabileceği için null check)
       displayedCategoryBonus: json['displayedCategoryBonus'] as int? ?? 150,
       isClaimingDoubleReward: json['isClaimingDoubleReward'] as bool? ?? false,
     );

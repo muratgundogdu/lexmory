@@ -1,95 +1,182 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/library_state.dart';
+import '../models/room_completion_reward_result.dart';
+import '../models/chest_reward_source.dart';
 import '../../../data/library_rooms.dart';
+import '../../../data/room_rewards.dart';
 import '../../game/providers/game_provider.dart';
+import '../provider/collection_provider.dart';
+
+import '../provider/library_navigation_provider.dart';
 
 class LibraryNotifier extends StateNotifier<LibraryState> {
   final Ref ref;
-  static const String _storageKey = 'lexmory_library_stages';
-  static const String _unlockKey = 'lexmory_library_unlocks'; // Kilitli odalar için yeni key
+  static const String _storageKey = 'lexmory_library_state_json';
+  static const String _legacyStagesKey = 'lexmory_library_stages';
+  static const String _legacyUnlocksKey = 'lexmory_library_unlocks';
+
+  @visibleForTesting
+  late final Future<void> initialization;
 
   LibraryNotifier(this.ref) : super(LibraryState.initial()) {
-    _loadFromDisk();
+    initialization = _loadFromDisk();
   }
 
-  // Cihazdan verileri yükle
   Future<void> _loadFromDisk() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String>? savedStages = prefs.getStringList(_storageKey);
-    final List<String>? savedUnlocks = prefs.getStringList(_unlockKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? jsonState = prefs.getString(_storageKey);
 
-    Map<String, int> loadedStages = Map.from(state.roomStages);
-    List<String> loadedUnlocks = List.from(state.unlockedRoomIds);
+      if (jsonState != null) {
+        state = LibraryState.fromJson(json.decode(jsonState));
+      } else {
+        // Migration from legacy keys
+        final List<String>? savedStages = prefs.getStringList(_legacyStagesKey);
+        final List<String>? savedUnlocks = prefs.getStringList(_legacyUnlocksKey);
 
-    if (savedStages != null) {
-      for (var item in savedStages) {
-        final parts = item.split(':');
-        if (parts.length == 2) {
-          loadedStages[parts[0]] = int.parse(parts[1]);
+        Map<String, int> loadedStages = Map.from(state.roomStages);
+        List<String> loadedUnlocks = List.from(state.unlockedRoomIds);
+
+        if (savedStages != null) {
+          for (var item in savedStages) {
+            final parts = item.split(':');
+            if (parts.length == 2) {
+              loadedStages[parts[0]] = int.parse(parts[1]);
+            }
+          }
         }
+        if (savedUnlocks != null) {
+          loadedUnlocks = savedUnlocks;
+        }
+
+        state = state.copyWith(roomStages: loadedStages, unlockedRoomIds: loadedUnlocks);
+        await _saveToDisk();
       }
+    } catch (e) {
+      debugPrint('LibraryNotifier load error: $e');
     }
-
-    if (savedUnlocks != null) {
-      loadedUnlocks = savedUnlocks;
-    }
-
-    state = state.copyWith(roomStages: loadedStages, unlockedRoomIds: loadedUnlocks);
   }
 
-  // Veriyi kalıcı olarak kaydet
   Future<void> _saveToDisk() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Stage bilgilerini kaydet
-    List<String> stagesToSave = state.roomStages.entries
-        .map((e) => '${e.key}:${e.value}')
-        .toList();
-    await prefs.setStringList(_storageKey, stagesToSave);
-
-    // Kilit açma bilgilerini kaydet
-    await prefs.setStringList(_unlockKey, state.unlockedRoomIds);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_storageKey, json.encode(state.toJson()));
+    } catch (e) {
+      debugPrint('LibraryNotifier save error: $e');
+    }
   }
 
   Future<void> upgradeRoom(String roomId) async {
-    // Oda verisini merkezi dosyadan al (Hardcoded 7 yerine dinamik totalStages kullanımı)
     final roomData = libraryRooms.firstWhere((r) => r['id'] == roomId);
     final int totalStages = roomData['totalStages'] as int;
+    final String roomName = roomData['name'] as String;
 
-    final currentStage = state.roomStages[roomId] ?? 0;
-
-    // 1. Durum Kontrolü: Zaten maksimum seviyede mi?
+    final int currentStage = state.roomStages[roomId] ?? 0;
     if (currentStage >= totalStages) return;
 
     final cost = getUpgradeCost(roomId, currentStage);
-    final gameState = ref.read(gameProvider);
+    final currentTokens = ref.read(gameProvider).tokens;
 
-    // 2. Ekonomi Kontrolü
-    if (gameState.tokens >= cost) {
-      // Önce token düş (Future<void> olduğu için await edilir)
+    if (currentTokens >= cost) {
+      // 1. Deduct tokens
       await ref.read(gameProvider.notifier).spendTokens(cost);
 
-      // Stage artır
+      // 2. Increment stage
       final newStages = Map<String, int>.from(state.roomStages);
-      newStages[roomId] = currentStage + 1;
+      final int nextStage = currentStage + 1;
+      newStages[roomId] = nextStage;
 
       state = state.copyWith(roomStages: newStages);
-
-      // Değişikliği anında diske yaz
       await _saveToDisk();
 
-      // 3. Oda Tamamlanma Kontrolü (Bir sonrakini aç)
-      if (newStages[roomId] == totalStages) {
+      // 3. Detect completion
+      if (nextStage == totalStages) {
+        await _applyRoomCompletionReward(roomId, roomName);
         _unlockNextRoom(roomId);
       }
+    }
+  }
+
+  Future<void> _applyRoomCompletionReward(String roomId, String roomName) async {
+    // Exactly-once check
+    if (state.claimedRoomRewardIds.contains(roomId)) {
+      debugPrint('LibraryNotifier: Reward for $roomId already claimed. Skipping.');
+      return;
+    }
+
+    debugPrint('LibraryNotifier: Applying reward for completing $roomId');
+
+    final config = getRewardForRoom(roomId);
+
+    try {
+      // 1. Grant tokens and jokers
+      await ref.read(gameProvider.notifier).addTokens(config.tokens);
+      await ref.read(gameProvider.notifier).addJokers(
+        hints: config.hints,
+        removeWrongs: config.removeWrongs,
+      );
+
+      // 2. Open chest immediately
+      final chestResult = await ref.read(collectionProvider.notifier).openChestReward(
+        ChestRewardSource.roomCompletion,
+        chestTypeId: config.chestTypeId,
+      );
+
+      // 3. Create Result and Update State
+      final result = RoomCompletionRewardResult(
+        roomId: roomId,
+        roomName: roomName,
+        tokenReward: config.tokens,
+        hintReward: config.hints,
+        removeWrongReward: config.removeWrongs,
+        chestTypeId: config.chestTypeId,
+        chestResult: chestResult,
+      );
+
+      final newClaimed = Set<String>.from(state.claimedRoomRewardIds)..add(roomId);
+      
+      state = state.copyWith(
+        claimedRoomRewardIds: newClaimed,
+        pendingCelebration: result,
+      );
+
+      await _saveToDisk();
+      debugPrint('LibraryNotifier: Successfully claimed and persisted reward for $roomId');
+    } catch (e) {
+      debugPrint('LibraryNotifier: FAILED to apply room completion reward: $e');
+      // Idempotency: roomId was not added to claimedRoomRewardIds, so it can retry next time.
+    }
+  }
+
+  void consumeCelebration() {
+    if (state.pendingCelebration != null) {
+      state = state.copyWith(clearPendingCelebration: true);
+      _saveToDisk();
+    }
+  }
+
+  void focusUnlockedRoom(String roomId) {
+    // 1. Ensure we are on the Library tab
+    ref.read(libraryTabProvider.notifier).state = 0;
+    
+    // 2. Set the newly unlocked room ID
+    state = state.copyWith(newlyUnlockedRoomId: roomId);
+  }
+
+  void clearRoomFocus() {
+    if (state.newlyUnlockedRoomId != null) {
+      state = state.copyWith(clearNewlyUnlockedRoomId: true);
     }
   }
 
   int getUpgradeCost(String roomId, int currentStage) {
     final room = libraryRooms.firstWhere((r) => r['id'] == roomId);
     final List<int> baseCosts = List<int>.from(room['baseCosts']);
-    final double multiplier = room['multiplier'] ?? 1.0;
+    final double multiplier = (room['multiplier'] as num?)?.toDouble() ?? 1.0;
 
     if (currentStage >= baseCosts.length) return 0;
     return (baseCosts[currentStage] * multiplier).toInt();
@@ -118,22 +205,18 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
   bool canAffordAnyUpgrade(int currentTokens) {
     for (String roomId in state.unlockedRoomIds) {
       final currentStage = state.roomStages[roomId] ?? 0;
-
-      // Oda verisini bul (max stage kontrolü için)
       final roomData = libraryRooms.firstWhere((r) => r['id'] == roomId);
       final int totalStages = roomData['totalStages'] as int;
 
       if (currentStage < totalStages) {
         final cost = getUpgradeCost(roomId, currentStage);
         if (currentTokens >= cost) {
-          return true; // En az bir oda için para yetiyor
+          return true;
         }
       }
     }
     return false;
   }
 }
-
-
 
 final libraryProvider = StateNotifierProvider<LibraryNotifier, LibraryState>((ref) => LibraryNotifier(ref));

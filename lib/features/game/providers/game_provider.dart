@@ -1,17 +1,23 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Core & Data
 import '../../../core/app_constants.dart';
+import '../../../core/services/game_audio_service.dart';
 
 // Tutorial
 import '../../missions/models/daily_mission.dart';
 import '../../missions/providers/daily_mission_provider.dart';
+import '../../library/models/chest_reward_source.dart';
+import '../../library/models/reward_presentation_event.dart';
+import '../../library/provider/collection_provider.dart';
+import '../../library/provider/reward_queue_provider.dart';
 import '../../tutorial/models/tutorial_state.dart';
 import '../../tutorial/providers/tutorial_provider.dart';
 
@@ -34,21 +40,25 @@ class GameNotifier extends StateNotifier<GameState> {
 
   // 🎯 BUG 1 ÇÖZÜMÜ: Kelime zaferinin mükerrer tetiklenmesini engelleyen kilit (flag)
   bool _isWordVictoryProcessed = false;
+  bool _isJokerActionInProgress = false;
 
   GameNotifier(this._repository, this._adService, this._ref) : super(_createPlaceholderState()) {
-    _init();
-    loadTokens();
+    init();
   }
 
-  Future<void> _init() async {
+  @protected
+  Future<void> init() async {
     await _loadFromStorage();
+    await loadTokens(); // Sequence ensured
+
     _checkOfflineRegeneration();
-    _startRegenTimer();
+    startRegenTimer();
   }
 
   // --- TOKEN REGENERATION ---
   void _checkOfflineRegeneration() {
     if (state.tokens >= AppConstants.maxRegenLimit) return;
+    
     final now = DateTime.now();
     final difference = now.difference(state.lastRegenTime);
     if (difference.inSeconds >= AppConstants.regenInterval.inSeconds) {
@@ -57,11 +67,12 @@ class GameNotifier extends StateNotifier<GameState> {
       int newTokens = (state.tokens + totalRegen).clamp(0, AppConstants.maxRegenLimit);
       DateTime updatedRegenTime = state.lastRegenTime.add(Duration(seconds: cycles * AppConstants.regenInterval.inSeconds));
       state = state.copyWith(tokens: newTokens, lastRegenTime: updatedRegenTime);
-      _persist();
+      persist();
     }
   }
 
-  void _startRegenTimer() {
+  @visibleForTesting
+  void startRegenTimer() {
     _regenTimer?.cancel();
     _regenTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (state.tokens < AppConstants.maxRegenLimit) {
@@ -81,13 +92,13 @@ class GameNotifier extends StateNotifier<GameState> {
       lastRegenTime: DateTime.now(),
       showOutOfTokensPanel: newTokens >= 5 ? false : state.showOutOfTokensPanel,
     );
-    _persist();
+    persist();
   }
 
   void _checkTokenStatus() {
     if (state.tokens < 5 && !state.showOutOfTokensPanel) {
       state = state.copyWith(showOutOfTokensPanel: true, isOutOfTokensDismissible: false);
-      _persist();
+      persist();
     }
   }
 
@@ -96,6 +107,7 @@ class GameNotifier extends StateNotifier<GameState> {
     final bool success = await _adService.showRewardedAd();
 
     if (success) {
+      if (!mounted) return;
       int rewardAmount = state.pendingAdReward > 0 ? state.pendingAdReward : 50;
 
       state = state.copyWith(
@@ -104,7 +116,7 @@ class GameNotifier extends StateNotifier<GameState> {
         pendingAdReward: 0,
         rewardTrigger: state.rewardTrigger + 1,
       );
-      _persist();
+      persist();
 
       try {
         _ref.read(dailyMissionProvider.notifier).updateProgress(
@@ -120,7 +132,7 @@ class GameNotifier extends StateNotifier<GameState> {
   static GameState _createPlaceholderState() {
     return GameState(
       category: "", targetWord: "", gridLetters: [], selectedIndices: [],
-      foundLetters: [], isInitialReveal: true, hasStarted: false, tokens: 300,
+      foundLetters: [], isInitialReveal: true, hasStarted: false, tokens: AppConstants.initialTokens,
       completedCategories: [], currentWordIndex: 0, eliminatedIndices: [],
       wrongAttemptsCount: 0, jokersUsedCount: 0, streak: 0,
       showVictoryPanel: false, lastRewardTotal: 0, showCategoryCompletePanel: false,
@@ -141,42 +153,57 @@ class GameNotifier extends StateNotifier<GameState> {
     final isTutorialCompleted = prefs.getBool('tutorial_completed') ?? false;
 
     if (!isTutorialCompleted) {
+      final tutorialCat = _repository.getCategoryByName("Meyveler");
       state = _buildStateForWord(
         word: "ELMA",
         category: "Meyveler",
-        tokens: savedTokens ?? 300,
+        tokens: savedTokens ?? AppConstants.initialTokens,
         completedCats: [],
         wordIdx: 0,
+        categoryWords: List<String>.from(tutorialCat['words'] as List),
       );
-      _persist();
+      persist();
       return;
     }
 
     if (savedData != null) {
       try {
-        state = GameState.fromJson(jsonDecode(savedData));
+        final loaded = GameState.fromJson(jsonDecode(savedData));
+        if (!mounted) return;
+        state = loaded;
 
         if (savedTokens != null) {
           state = state.copyWith(tokens: savedTokens);
         }
+        
         _checkOfflineRegeneration();
       } catch (e) {
+        if (!mounted) return;
         state = _createInitialState(_repository, existingTokens: savedTokens);
       }
     } else {
+      if (!mounted) return;
       state = _createInitialState(_repository, existingTokens: savedTokens);
     }
 
-    _persist();
+    persist();
   }
 
-  Future<void> _persist() async {
+  @protected
+  Future<void> persist() async {
+    if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, jsonEncode(state.toJson()));
+    // persist tokens separately to avoid sync issues
     await prefs.setInt('user_tokens', state.tokens);
   }
 
-  static GameState _createInitialState(GameRepository repository, {int? existingTokens, DateTime? lastRegen}) {
+  static GameState _createInitialState(GameRepository repository, {
+    int? existingTokens, 
+    DateTime? lastRegen,
+    int hintInventory = 0,
+    int removeWrongInventory = 0,
+  }) {
     final selectedCatData = repository.getNextCategory([]);
     final String catName = selectedCatData['category'] as String;
     final List<String> words = repository.getWordsForCategory(selectedCatData);
@@ -184,8 +211,10 @@ class GameNotifier extends StateNotifier<GameState> {
     return _buildStateForWord(
       word: words[0],
       category: catName,
-      tokens: existingTokens ?? 300,
+      tokens: existingTokens ?? AppConstants.initialTokens,
       lastRegen: lastRegen ?? DateTime.now(),
+      hintInventory: hintInventory,
+      removeWrongInventory: removeWrongInventory,
       completedCats: [],
       wordIdx: 0,
       solvedWords: 0,
@@ -193,6 +222,7 @@ class GameNotifier extends StateNotifier<GameState> {
       hasClaimedDoubleReward: false,
       displayedCategoryBonus: 150,
       isClaimingDoubleReward: false,
+      categoryWords: words,
     );
   }
 
@@ -200,19 +230,18 @@ class GameNotifier extends StateNotifier<GameState> {
   void startMemoryReveal() {
     if (state.hasStarted) return;
 
+    _ref.read(gameAudioServiceProvider).playBoardTransition();
     state = state.copyWith(hasStarted: true, isInitialReveal: false);
-    _persist();
+    persist();
 
     final tut = _ref.read(tutorialProvider);
 
-    if (tut.phase == TutorialPhase.contextual &&
-        tut.hintClearTutorialShown &&
-        !tut.revealTutorialShown &&
+    if (tut.onboardingStep == RealGameOnboardingStep.waitingForFoundButton &&
         !tut.isTutorialActive &&
         state.category != "Meyveler") {
       state = state.copyWith(tutorialLock: true);
-      _persist();
-      _ref.read(tutorialProvider.notifier).startForcedRevealOnboarding();
+      persist();
+      _ref.read(tutorialProvider.notifier).triggerRevealJokerStep();
     }
   }
 
@@ -246,6 +275,7 @@ class GameNotifier extends StateNotifier<GameState> {
             }
           }
         } else {
+          _ref.read(gameAudioServiceProvider).playWrongTap();
           HapticFeedback.lightImpact();
         }
       }
@@ -267,6 +297,7 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   void _handleCorrectSelection(int gridIdx, int targetIdx, String letter) {
+    _ref.read(gameAudioServiceProvider).playCardFlip();
     final newFound = List<String?>.from(state.foundLetters);
     newFound[targetIdx] = letter;
 
@@ -278,7 +309,7 @@ class GameNotifier extends StateNotifier<GameState> {
       foundLetters: newFound,
     );
 
-    _persist();
+    persist();
 
     // Eğer kelimede boş yer kalmadıysa ve bu kelime henüz işlenmediyse zaferi tetikle
     if (!newFound.contains(null) && !_isWordVictoryProcessed) {
@@ -292,7 +323,7 @@ class GameNotifier extends StateNotifier<GameState> {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('user_tokens', newTokens);
-    await _persist();
+    await persist();
   }
 
   Future<void> addTokens(int amount) async {
@@ -305,7 +336,15 @@ class GameNotifier extends StateNotifier<GameState> {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('user_tokens', newTokens);
-    await _persist();
+    await persist();
+  }
+
+  Future<void> addJokers({int hints = 0, int removeWrongs = 0}) async {
+    state = state.copyWith(
+      hintInventory: state.hintInventory + hints,
+      removeWrongInventory: state.removeWrongInventory + removeWrongs,
+    );
+    await persist();
   }
 
   Future<void> loadTokens() async {
@@ -321,13 +360,14 @@ class GameNotifier extends StateNotifier<GameState> {
     if (state.hasClaimedDoubleReward || state.isClaimingDoubleReward) return;
 
     state = state.copyWith(isClaimingDoubleReward: true);
-    _persist();
+    persist();
 
     const int adBonusAmount = 150;
 
     final bool success = await _adService.showRewardedAd();
 
     if (success) {
+      if (!mounted) return;
       state = state.copyWith(
         tokens: state.tokens + adBonusAmount,
         totalEarnedTokens: state.totalEarnedTokens + adBonusAmount,
@@ -345,9 +385,10 @@ class GameNotifier extends StateNotifier<GameState> {
         debugPrint('Error updating daily mission for watchAds in doubleRewardWithAd: $e');
       }
     } else {
+      if (!mounted) return;
       state = state.copyWith(isClaimingDoubleReward: false);
     }
-    _persist();
+    await persist();
   }
 
   void resetCategoryCompletionStates() {
@@ -356,10 +397,11 @@ class GameNotifier extends StateNotifier<GameState> {
       displayedCategoryBonus: 150,
       isClaimingDoubleReward: false,
     );
-    _persist();
+    persist();
   }
 
   void _handleWrongSelection(int gridIdx) async {
+    _ref.read(gameAudioServiceProvider).playWrongTap();
     final tut = _ref.read(tutorialProvider);
     final bool isFirstRealError = !tut.tokenTutorialShown && state.category != "Meyveler";
     final int tokenDeduction = isFirstRealError ? 0 : 5;
@@ -385,15 +427,11 @@ class GameNotifier extends StateNotifier<GameState> {
       debugPrint('Error resetting daily mission streak progress: $e');
     }
 
-    // 🎯 BUG 2 ÇÖZÜMÜ: Seri bozulduğunda updateMaxProgress(..., 0) ÇIKARILDI!
-    // Böylece max_streak aşağıya çekilmeyecek, mevcut rekor korunacak.
-
     _checkTokenStatus();
 
     await Future.delayed(const Duration(milliseconds: 600));
-    if (mounted) {
-      state = state.copyWith(lastAttemptIndex: null, isLastAttemptCorrect: null);
-    }
+    if (!mounted) return;
+    state = state.copyWith(lastAttemptIndex: null, isLastAttemptCorrect: null);
 
     if (tut.hintJokerTutorialCompleted &&
         !tut.tokenTutorialShown &&
@@ -415,7 +453,6 @@ class GameNotifier extends StateNotifier<GameState> {
 
     int currentStreak = state.streak;
     bool isPerfect = state.wrongAttemptsCount == 0 && state.jokersUsedCount == 0;
-    //currentStreak = isPerfect ? (currentStreak + 1).clamp(0, 5) : 0;
     currentStreak = isPerfect ? (currentStreak + 1) : 0;
 
     // 🎯 BUG 1 ÇÖZÜMÜ: Gerçek oyun olayında solveWords SADECE 1 kez çağrılır
@@ -427,8 +464,6 @@ class GameNotifier extends StateNotifier<GameState> {
       debugPrint('Error updating daily mission for solveWords: $e');
     }
 
-    // 🎯 BUG 2 ÇÖZÜMÜ: Seri rekorunu kontrol eden yeni 'updateProgress' çağrısı
-    // (Metot adını 'updateProgress' yaptık ve anlık seriyi 'amount' olarak gönderdik)
     try {
       _ref.read(dailyMissionProvider.notifier).updateProgress(
         DailyMissionType.reachStreak,
@@ -479,6 +514,8 @@ class GameNotifier extends StateNotifier<GameState> {
       const int kategoriBonusuTaban = 150;
       final int toplamKazanc = kelimeKazanci + kategoriBonusuTaban;
 
+      final bool isFirstTimeCompletion = !state.completedCategories.contains(state.category);
+
       state = state.copyWith(
         tokens: state.tokens + toplamKazanc,
         showCategoryCompletePanel: true,
@@ -492,7 +529,27 @@ class GameNotifier extends StateNotifier<GameState> {
         displayedCategoryBonus: kategoriBonusuTaban,
         isClaimingDoubleReward: false,
       );
-      await _persist();
+      await persist();
+
+      if (isFirstTimeCompletion) {
+        try {
+          final result = await _ref.read(collectionProvider.notifier).openChestReward(ChestRewardSource.categoryCompletion);
+          
+          _ref.read(rewardQueueProvider.notifier).enqueue(RewardPresentationEvent(
+            id: 'cat_${state.category}_${DateTime.now().millisecondsSinceEpoch}',
+            source: ChestRewardSource.categoryCompletion,
+            result: result,
+            createdAt: DateTime.now(),
+            title: 'Kategori Tamamlandı!',
+            subtitle: state.category,
+          ));
+
+          state = state.copyWith(categoryRewardResult: result);
+          await persist();
+        } catch (e) {
+          debugPrint('Failed to open category chest reward: $e');
+        }
+      }
 
       try {
         _ref.read(dailyMissionProvider.notifier).updateProgress(
@@ -524,7 +581,7 @@ class GameNotifier extends StateNotifier<GameState> {
         totalSolvedWords: state.totalSolvedWords + 1,
         totalEarnedTokens: state.totalEarnedTokens + reward.total,
       );
-      await _persist();
+      await persist();
 
       try {
         _ref.read(dailyMissionProvider.notifier).updateProgress(
@@ -550,20 +607,14 @@ class GameNotifier extends StateNotifier<GameState> {
 
   // --- JOKERS ---
   Future<void> useHint() async {
-    if (state.tutorialLock) return;
+    if (_isJokerActionInProgress) return;
+    
     final tutorialController = _ref.read(tutorialProvider.notifier);
     final tutorialState = _ref.read(tutorialProvider);
     final bool isForced = tutorialState.currentStep == TutorialStep.forcedHint;
 
+    if (state.tutorialLock && !isForced) return;
     if (tutorialState.isTutorialActive && !isForced) return;
-
-    final bool isFree = isForced || (!tutorialState.freeHintUsed && state.category != "Meyveler");
-    final int cost = isFree ? 0 : 80;
-
-    if (state.tokens < cost) {
-      _showOutOfTokensForJoker(cost);
-      return;
-    }
 
     final nextTargetIndex = state.foundLetters.indexOf(null);
     if (nextTargetIndex == -1) return;
@@ -577,45 +628,87 @@ class GameNotifier extends StateNotifier<GameState> {
       }
     }
 
-    if (gridIdx != -1) {
+    if (gridIdx == -1) return;
+
+    _isJokerActionInProgress = true;
+    try {
       if (isForced) {
-        tutorialController.completeJokerStep('hint_joker_tutorial_completed');
+        tutorialController.onHintJokerActionStarted();
       }
 
+      // Phase 1: Visual feedback
       state = state.copyWith(lastAttemptIndex: gridIdx, isLastAttemptCorrect: true);
       await Future.delayed(const Duration(milliseconds: 800));
 
-      _handleCorrectSelection(gridIdx, nextTargetIndex, char);
+      if (!mounted) return;
 
-      state = state.copyWith(
-        tokens: state.tokens - cost,
-        jokersUsedCount: state.jokersUsedCount + 1,
-        totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
+      // Phase 2: Atomic State Update
+      _ref.read(gameAudioServiceProvider).playCardFlip();
+      
+      final current = state; // Fresh read
+      final tutorial = _ref.read(tutorialProvider); // Fresh read
+
+      final bool isTutorialFreebie = !tutorial.freeHintUsed && current.category != "Meyveler" && current.category.isNotEmpty;
+      final bool isTutorialCategory = current.category == "Meyveler";
+      final bool hasInventory = current.hintInventory > 0;
+      
+      int nextInventory = current.hintInventory;
+      int finalCost = 80;
+
+      if (isForced || isTutorialFreebie || isTutorialCategory) {
+        finalCost = 0;
+      } else if (hasInventory) {
+        finalCost = 0;
+        nextInventory--;
+      }
+
+      if (current.tokens < finalCost) {
+        _showOutOfTokensForJoker(finalCost);
+        return;
+      }
+
+      final newFound = List<String?>.from(current.foundLetters);
+      newFound[nextTargetIndex] = char;
+
+      state = current.copyWith(
+        lastAttemptIndex: gridIdx,
+        isLastAttemptCorrect: true,
+        justFoundIndex: nextTargetIndex,
+        selectedIndices: [...current.selectedIndices, gridIdx],
+        foundLetters: newFound,
+        tokens: current.tokens - finalCost,
+        hintInventory: nextInventory,
+        jokersUsedCount: current.jokersUsedCount + 1,
+        totalCategoryJokersCount: current.totalCategoryJokersCount + 1,
       );
 
-      // 🎯 BUG 1 ÇÖZÜMÜ: Joker kullanımında solveWords tetikleyen hatalı kod SİLİNDİ!
+      if (isTutorialFreebie) {
+        tutorialController.markFlag('free_hint_used');
+      }
+
+      await persist();
+
+      if (!newFound.contains(null) && !_isWordVictoryProcessed) {
+        _handleWordVictory();
+      }
 
       if (isForced) {
-        await tutorialController.nextStepWithDelay(animationDuration: Duration.zero);
+        await tutorialController.onHintJokerActionCompleted();
       }
-      _persist();
+    } finally {
+      _isJokerActionInProgress = false;
     }
   }
 
   Future<void> clearWrong() async {
+    if (_isJokerActionInProgress) return;
+
     final tutorialController = _ref.read(tutorialProvider.notifier);
     final tutorialState = _ref.read(tutorialProvider);
     final bool isForced = tutorialState.currentStep == TutorialStep.forcedClear;
 
+    if (state.tutorialLock && !isForced) return;
     if (tutorialState.isTutorialActive && !isForced) return;
-
-    final bool isFree = isForced || (!tutorialState.removeJokerTutorialCompleted && state.category != "Meyveler");
-    final int cost = isFree ? 0 : 60;
-
-    if (state.tokens < cost) {
-      _showOutOfTokensForJoker(cost);
-      return;
-    }
 
     List<int> toEliminate = [];
     for (int i = 0; i < state.gridLetters.length; i++) {
@@ -625,35 +718,75 @@ class GameNotifier extends StateNotifier<GameState> {
       if (toEliminate.length >= 3) break;
     }
 
-    if (toEliminate.isNotEmpty) {
+    if (toEliminate.isEmpty) return;
+
+    _isJokerActionInProgress = true;
+    try {
       if (isForced) {
-        tutorialController.completeJokerStep('remove_joker_tutorial_completed');
+        tutorialController.onClearJokerActionStarted();
       }
 
-      state = state.copyWith(
-        tokens: state.tokens - cost,
-        eliminatedIndices: [...state.eliminatedIndices, ...toEliminate],
-        jokersUsedCount: state.jokersUsedCount + 1,
-        totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
+      _ref.read(gameAudioServiceProvider).playRemoveWrongJoker();
+      
+      final current = state; // Fresh read
+      final tutorial = _ref.read(tutorialProvider); // Fresh read
+
+      final bool isTutorialFreebie = !tutorial.freeRemoveUsed && current.category != "Meyveler" && current.category.isNotEmpty;
+      final bool isTutorialCategory = current.category == "Meyveler";
+      final bool hasInventory = current.removeWrongInventory > 0;
+
+      int nextInventory = current.removeWrongInventory;
+      int finalCost = 60;
+
+      if (isForced || isTutorialFreebie || isTutorialCategory) {
+        finalCost = 0;
+      } else if (hasInventory) {
+        finalCost = 0;
+        nextInventory--;
+      }
+
+      if (current.tokens < finalCost) {
+        _showOutOfTokensForJoker(finalCost);
+        return;
+      }
+
+      state = current.copyWith(
+        tokens: current.tokens - finalCost,
+        removeWrongInventory: nextInventory,
+        eliminatedIndices: [...current.eliminatedIndices, ...toEliminate],
+        jokersUsedCount: current.jokersUsedCount + 1,
+        totalCategoryJokersCount: current.totalCategoryJokersCount + 1,
       );
 
-      // 🎯 BUG 1 ÇÖZÜMÜ: Joker kullanımında solveWords tetikleyen hatalı kod SİLİNDİ!
+      if (isTutorialFreebie) {
+        tutorialController.markFlag('free_remove_used');
+      }
+
+      await persist();
+
+      await Future.delayed(const Duration(milliseconds: 1000));
 
       if (isForced) {
-        await tutorialController.nextStepWithDelay(animationDuration: const Duration(milliseconds: 1000));
+        await tutorialController.onClearJokerActionCompleted();
       }
-      _persist();
+    } finally {
+      _isJokerActionInProgress = false;
     }
   }
 
   Future<void> showAgain() async {
+    if (_isJokerActionInProgress) return;
+
     final tutorialController = _ref.read(tutorialProvider.notifier);
     final tutorialState = _ref.read(tutorialProvider);
     final bool isForced = tutorialState.currentStep == TutorialStep.forcedReveal;
 
+    if (state.tutorialLock && !isForced) return;
     if (tutorialState.isTutorialActive && !isForced) return;
 
-    final bool isFree = isForced || (!tutorialState.freeRevealUsed && state.category != "Meyveler");
+    final bool isTutorialFreebie = !tutorialState.freeRevealUsed && state.category != "Meyveler" && state.category.isNotEmpty;
+    final bool isTutorialCategory = state.category == "Meyveler";
+    final bool isFree = isForced || isTutorialFreebie || isTutorialCategory;
     final int cost = isFree ? 0 : 40;
 
     if (state.tokens < cost) {
@@ -661,31 +794,44 @@ class GameNotifier extends StateNotifier<GameState> {
       return;
     }
 
-    if (isForced) {
-      tutorialController.completeJokerStep('reveal_tutorial_shown');
-    }
+    _isJokerActionInProgress = true;
+    try {
+      if (isForced) {
+        tutorialController.onRevealJokerActionStarted();
+      }
 
-    state = state.copyWith(
-      tokens: state.tokens - cost,
-      isInitialReveal: true,
-      jokersUsedCount: state.jokersUsedCount + 1,
-      totalCategoryJokersCount: state.totalCategoryJokersCount + 1,
-      tutorialLock: isForced ? false : state.tutorialLock,
-    );
-    _persist();
+      _ref.read(gameAudioServiceProvider).playBoardTransition();
+      
+      final current = state;
+      state = current.copyWith(
+        tokens: current.tokens - cost,
+        isInitialReveal: true,
+        jokersUsedCount: current.jokersUsedCount + 1,
+        totalCategoryJokersCount: current.totalCategoryJokersCount + 1,
+        tutorialLock: isForced ? false : current.tutorialLock,
+      );
 
-    // 🎯 BUG 1 ÇÖZÜMÜ: Joker kullanımında solveWords tetikleyen hatalı kod SİLİNDİ!
+      if (isTutorialFreebie) {
+        tutorialController.markFlag('free_reveal_used');
+      }
 
-    await Future.delayed(const Duration(seconds: 4));
+      await persist();
 
-    if (mounted) {
+      await Future.delayed(const Duration(seconds: 4));
+
+      if (!mounted) return;
+      _ref.read(gameAudioServiceProvider).playBoardTransition();
       state = state.copyWith(isInitialReveal: false);
-      _persist();
+      await persist();
 
       if (isForced) {
         await Future.delayed(const Duration(seconds: 1));
-        tutorialController.nextStep();
+        if (mounted) {
+          await tutorialController.onRevealJokerActionCompleted();
+        }
       }
+    } finally {
+      _isJokerActionInProgress = false;
     }
   }
 
@@ -699,6 +845,8 @@ class GameNotifier extends StateNotifier<GameState> {
         word: words[state.currentWordIndex + 1],
         category: state.category,
         tokens: state.tokens,
+        hintInventory: state.hintInventory,
+        removeWrongInventory: state.removeWrongInventory,
         completedCats: state.completedCategories,
         wordIdx: state.currentWordIndex + 1,
         streak: state.streak,
@@ -710,15 +858,19 @@ class GameNotifier extends StateNotifier<GameState> {
         hasClaimedDoubleReward: state.hasClaimedDoubleReward,
         displayedCategoryBonus: state.displayedCategoryBonus,
         isClaimingDoubleReward: state.isClaimingDoubleReward,
+        categoryWords: words,
       );
     } else {
       final currentCompleted = [...state.completedCategories, state.category];
       final nextCatData = _repository.getNextCategory(currentCompleted);
+      final nextWords = _repository.getWordsForCategory(nextCatData);
 
       state = _buildStateForWord(
-        word: (nextCatData['words'] as List)[0],
+        word: nextWords[0],
         category: nextCatData['category'] as String,
         tokens: state.tokens,
+        hintInventory: state.hintInventory,
+        removeWrongInventory: state.removeWrongInventory,
         completedCats: currentCompleted,
         wordIdx: 0,
         streak: state.streak,
@@ -728,19 +880,20 @@ class GameNotifier extends StateNotifier<GameState> {
         hasClaimedDoubleReward: false,
         displayedCategoryBonus: 150,
         isClaimingDoubleReward: false,
+        categoryWords: nextWords,
       );
     }
-    _persist();
+    persist();
   }
 
   void _showOutOfTokensForJoker(int amount) {
     state = state.copyWith(showOutOfTokensPanel: true, isOutOfTokensDismissible: true, pendingAdReward: amount);
-    _persist();
+    persist();
   }
 
   void closeOutOfTokensPanel() {
     state = state.copyWith(showOutOfTokensPanel: false);
-    _persist();
+    persist();
   }
 
   void startNextCategory() {
@@ -748,26 +901,46 @@ class GameNotifier extends StateNotifier<GameState> {
       showCategoryCompletePanel: false,
       totalCategoryWrongCount: 0,
       totalCategoryJokersCount: 0,
+      categoryRewardResult: null,
     );
     resetCategoryCompletionStates();
     _loadNextWord();
   }
 
   void resetGame() {
-    state = _createInitialState(_repository, existingTokens: state.tokens, lastRegen: state.lastRegenTime);
+    state = _createInitialState(
+      _repository, 
+      existingTokens: state.tokens, 
+      lastRegen: state.lastRegenTime,
+      hintInventory: state.hintInventory,
+      removeWrongInventory: state.removeWrongInventory,
+    );
     resetCategoryCompletionStates();
-    _persist();
+    persist();
   }
 
   void resetGameForTutorial() {
-    state = _buildStateForWord(word: "ELMA", category: "Meyveler", tokens: 300, completedCats: [], wordIdx: 0);
+    final tutorialCat = _repository.getCategoryByName("Meyveler");
+    state = _buildStateForWord(
+      word: "ELMA",
+      category: "Meyveler",
+      tokens: 300,
+      hintInventory: state.hintInventory,
+      removeWrongInventory: state.removeWrongInventory,
+      completedCats: [],
+      wordIdx: 0,
+      categoryWords: List<String>.from(tutorialCat['words'] as List),
+    );
     resetCategoryCompletionStates();
-    _persist();
+    persist();
   }
 
   static GameState _buildStateForWord({
     required String word, required String category, required int tokens,
     required List<String> completedCats, required int wordIdx,
+    required List<String> categoryWords,
+    int hintInventory = 0,
+    int removeWrongInventory = 0,
     int streak = 0, int totalWrong = 0, int totalJokers = 0,
     int rewardTrigger = 0, int solvedWords = 0, int earnedTokens = 0, DateTime? lastRegen,
     bool hasClaimedDoubleReward = false,
@@ -775,31 +948,103 @@ class GameNotifier extends StateNotifier<GameState> {
     bool isClaimingDoubleReward = false,
   }) {
     const alphabet = "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ";
-    final List<String> letters = word.toUpperCase().split('');
+    final targetUpper = word.toUpperCase();
+    final targetChars = targetUpper.characters.toList();
+    final int targetLen = targetChars.length;
+    
     final random = Random();
+    final List<String> gridLetters = [...targetChars];
 
-    while (letters.length < 16) {
+    while (gridLetters.length < 16) {
       String randomChar = alphabet[random.nextInt(alphabet.length)];
-      if (!letters.contains(randomChar)) letters.add(randomChar);
+      if (!gridLetters.contains(randomChar)) gridLetters.add(randomChar);
     }
-    letters.shuffle();
+    gridLetters.shuffle();
 
     final Set<int> hintIndices = {};
-    if (category == "Meyveler" && word.toUpperCase() == "ELMA") {
+    if (category == "Meyveler" && targetUpper == "ELMA") {
       hintIndices.addAll([0, 2]);
     } else {
-      final int hintCount = word.length > 8 ? 3 : (word.length > 5 ? 2 : 1);
-      while (hintIndices.length < hintCount) hintIndices.add(random.nextInt(word.length));
+      final int hintCount = targetLen >= 10 ? 4 : (targetLen >= 8 ? 3 : (targetLen >= 5 ? 2 : 1));
+      while (hintIndices.length < hintCount) {
+        hintIndices.add(random.nextInt(targetLen));
+      }
     }
 
-    final List<String?> initialFound = List.filled(word.length, null);
+    // --- Çakışma Çözümleme (Conflict Resolution) ---
+    final potentialConflicts = categoryWords
+        .map((w) => w.toUpperCase())
+        .where((w) => w != targetUpper && w.characters.length == targetLen)
+        .map((w) => w.characters.toList())
+        .toList();
+
+    if (potentialConflicts.isNotEmpty) {
+      bool ambiguityResolved = false;
+      int maxAttempts = 10;
+      while (!ambiguityResolved && maxAttempts > 0) {
+        maxAttempts--;
+        ambiguityResolved = true;
+        
+        for (final conflict in potentialConflicts) {
+          // 1. Mevcut ipuçları ile eşleşiyor mu? (Positional match)
+          bool matchesHints = true;
+          for (int hIdx in hintIndices) {
+            if (conflict[hIdx] != targetChars[hIdx]) {
+              matchesHints = false;
+              break;
+            }
+          }
+
+          if (matchesHints) {
+            // 2. Kalan harfleri grid'den oluşturulabiliyor mu?
+            // Revealed harfler grid'den tüketilir, bu yüzden kalanları kontrol etmeliyiz.
+            final List<String> remainingGrid = List.from(gridLetters);
+            // Revealed harfleri grid'den çıkar
+            for (int hIdx in hintIndices) {
+              remainingGrid.remove(targetChars[hIdx]);
+            }
+            
+            // Conflict word'ün REVEAL EDİLMEMİŞ harflerini grid'den çıkarabiliyor muyuz?
+            bool canBeFormed = true;
+            for (int i = 0; i < targetLen; i++) {
+              if (!hintIndices.contains(i)) {
+                if (!remainingGrid.remove(conflict[i])) {
+                  canBeFormed = false;
+                  break;
+                }
+              }
+            }
+
+            if (canBeFormed) {
+              // Belirsizlik var: Ayırt edici bir harf aç
+              int diffIdx = -1;
+              for (int i = 0; i < targetLen; i++) {
+                if (!hintIndices.contains(i) && targetChars[i] != conflict[i]) {
+                  diffIdx = i;
+                  break;
+                }
+              }
+
+              if (diffIdx != -1) {
+                hintIndices.add(diffIdx);
+                ambiguityResolved = false;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+    // ----------------------------------------------
+
+    final List<String?> initialFound = List.filled(targetLen, null);
     final List<int> selectedGridIndices = [];
 
     for (int hIdx in hintIndices) {
-      final char = word[hIdx].toUpperCase();
+      final char = targetChars[hIdx];
       initialFound[hIdx] = char;
-      for (int i = 0; i < letters.length; i++) {
-        if (letters[i] == char && !selectedGridIndices.contains(i)) {
+      for (int i = 0; i < gridLetters.length; i++) {
+        if (gridLetters[i] == char && !selectedGridIndices.contains(i)) {
           selectedGridIndices.add(i);
           break;
         }
@@ -807,21 +1052,45 @@ class GameNotifier extends StateNotifier<GameState> {
     }
 
     return GameState(
-      category: category, targetWord: word.toUpperCase(), gridLetters: letters,
-      selectedIndices: selectedGridIndices, foundLetters: initialFound,
-      isInitialReveal: true, hasStarted: false, tokens: tokens,
-      completedCategories: completedCats, currentWordIndex: wordIdx,
-      eliminatedIndices: [], showVictoryPanel: false, showGameFinishedPanel: false,
-      totalSolvedWords: solvedWords, lastRewardTotal: 0, wrongAttemptsCount: 0,
-      jokersUsedCount: 0, streak: streak, showCategoryCompletePanel: false,
-      lastCompletedCategory: null, totalCategoryWrongCount: totalWrong,
-      totalCategoryJokersCount: totalJokers, rewardTrigger: rewardTrigger,
-      totalEarnedTokens: earnedTokens, showOutOfTokensPanel: false,
-      isOutOfTokensDismissible: false, lastRegenTime: lastRegen ?? DateTime.now(),
+      category: category, 
+      targetWord: targetUpper, 
+      gridLetters: gridLetters,
+      selectedIndices: selectedGridIndices, 
+      foundLetters: initialFound,
+      isInitialReveal: true, 
+      hasStarted: false, 
+      tokens: tokens,
+      hintInventory: hintInventory,
+      removeWrongInventory: removeWrongInventory,
+      completedCategories: completedCats, 
+      currentWordIndex: wordIdx,
+      eliminatedIndices: [], 
+      showVictoryPanel: false, 
+      showGameFinishedPanel: false,
+      totalSolvedWords: solvedWords, 
+      lastRewardTotal: 0, 
+      wrongAttemptsCount: 0,
+      jokersUsedCount: 0, 
+      streak: streak, 
+      showCategoryCompletePanel: false,
+      lastCompletedCategory: null, 
+      totalCategoryWrongCount: totalWrong,
+      totalCategoryJokersCount: totalJokers, 
+      rewardTrigger: rewardTrigger,
+      totalEarnedTokens: earnedTokens, 
+      showOutOfTokensPanel: false,
+      isOutOfTokensDismissible: false, 
+      lastRegenTime: lastRegen ?? DateTime.now(),
       hasClaimedDoubleReward: hasClaimedDoubleReward,
       displayedCategoryBonus: displayedCategoryBonus,
       isClaimingDoubleReward: isClaimingDoubleReward,
     );
+  }
+
+  @override
+  void dispose() {
+    _regenTimer?.cancel();
+    super.dispose();
   }
 }
 

@@ -31,56 +31,66 @@ class SettingsScreen extends ConsumerWidget {
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   const SizedBox(height: AppDimens.s24),
-                  _buildSectionHeader("TERCİHLER"),
-                  _buildSettingsGroup([
-                    _buildSettingsTile(
-                      icon: Icons.volume_up_rounded,
-                      title: "Ses Efektleri",
-                      trailing: _buildSwitch(true),
-                    ),
-                    _buildSettingsTile(
-                      icon: Icons.music_note_rounded,
-                      title: "Müzik",
-                      trailing: _buildSwitch(false),
-                    ),
-                    _buildSettingsTile(
-                      icon: Icons.vibration_rounded,
-                      title: "Titreşim",
-                      trailing: _buildSwitch(true),
-                    ),
-                  ]),
+                  
+                  SettingsSection(
+                    title: "TERCİHLER",
+                    children: [
+                      _buildSettingsTile(
+                        icon: Icons.volume_up_rounded,
+                        title: "Ses Efektleri",
+                        trailing: _buildSwitch(true),
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.music_note_rounded,
+                        title: "Müzik",
+                        trailing: _buildSwitch(false),
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.vibration_rounded,
+                        title: "Titreşim",
+                        trailing: _buildSwitch(true),
+                      ),
+                    ],
+                  ),
 
                   const SizedBox(height: AppDimens.s32),
-                  _buildSectionHeader("DESTEK & BİLGİ"),
-                  _buildSettingsGroup([
-                    _buildSettingsTile(
-                      icon: Icons.language_rounded,
-                      title: "Dil",
-                      subtitle: "Türkçe",
-                      onTap: () {},
-                    ),
-                    _buildSettingsTile(
-                      icon: Icons.verified_user_rounded,
-                      title: "Gizlilik Politikası",
-                      onTap: () {},
-                    ),
-                    _buildSettingsTile(
-                      icon: Icons.mail_rounded,
-                      title: "Bize Ulaşın",
-                      onTap: () {},
-                    ),
-                  ]),
+                  
+                  SettingsSection(
+                    title: "DESTEK & BİLGİ",
+                    children: [
+                      _buildSettingsTile(
+                        icon: Icons.language_rounded,
+                        title: "Dil",
+                        subtitle: "Türkçe",
+                        onTap: () {},
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.verified_user_rounded,
+                        title: "Gizlilik Politikası",
+                        onTap: () {},
+                      ),
+                      _buildSettingsTile(
+                        icon: Icons.mail_rounded,
+                        title: "Bize Ulaşın",
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
 
                   const SizedBox(height: AppDimens.s32),
-                  _buildSectionHeader("TEHLİKELİ ALAN"),
-                  _buildSettingsGroup([
-                    _buildSettingsTile(
-                      icon: Icons.delete_forever_rounded,
-                      title: "Oyunu Sıfırla",
-                      titleColor: AppColors.error,
-                      onTap: () => _showResetDialog(context, ref),
-                    ),
-                  ]),
+                  
+                  SettingsSection(
+                    title: "TEHLİKELİ ALAN",
+                    footerText: "Bu işlem geri alınamaz ve tüm verileriniz kalıcı olarak silinir.",
+                    children: [
+                      _buildSettingsTile(
+                        icon: Icons.delete_forever_rounded,
+                        title: "Oyunu Sıfırla",
+                        titleColor: AppColors.error,
+                        onTap: () => _showResetDialog(context, ref),
+                      ),
+                    ],
+                  ),
 
                   const SizedBox(height: 60),
                   _buildVersionInfo(),
@@ -119,27 +129,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 12, bottom: 8),
-      child: Text(
-        title,
-        style: AppTypography.labelSmall.copyWith(color: AppColors.textMuted, letterSpacing: 1.5),
-      ),
-    );
-  }
-
-  Widget _buildSettingsGroup(List<Widget> children) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(children: children),
-    );
-  }
-
   Widget _buildSettingsTile({
     required IconData icon,
     required String title,
@@ -148,17 +137,31 @@ class SettingsScreen extends ConsumerWidget {
     VoidCallback? onTap,
     Color? titleColor,
   }) {
-    return ListTile(
-      onTap: onTap,
-      leading: Icon(icon, color: titleColor ?? AppColors.primary, size: 22),
-      title: Text(
-        title,
-        style: AppTypography.bodyLarge.copyWith(color: titleColor ?? AppColors.textPrimary, fontSize: 15),
+    return Material(
+      color: AppColors.surface,
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(icon, color: titleColor ?? AppColors.primary, size: 22),
+        title: Text(
+          title,
+          style: AppTypography.bodyLarge.copyWith(color: titleColor ?? AppColors.textPrimary, fontSize: 15),
+        ),
+        subtitle: subtitle != null
+            ? Text(subtitle, style: AppTypography.bodyMedium.copyWith(fontSize: 12))
+            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ?trailing,
+            const SizedBox(width: AppDimens.s8),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textMuted.withValues(alpha: 0.2),
+              size: 20,
+            ),
+          ],
+        ),
       ),
-      subtitle: subtitle != null
-          ? Text(subtitle, style: AppTypography.bodyMedium.copyWith(fontSize: 12))
-          : null,
-      trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: AppColors.border),
     );
   }
 
@@ -198,6 +201,58 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class SettingsSection extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+  final String? footerText;
+
+  const SettingsSection({
+    super.key,
+    required this.title,
+    required this.children,
+    this.footerText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 12, bottom: 8),
+          child: Text(
+            title,
+            style: AppTypography.labelSmall.copyWith(
+              color: AppColors.textMuted,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(children: children),
+        ),
+        if (footerText != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 12, top: 8),
+            child: Text(
+              footerText!,
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

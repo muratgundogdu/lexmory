@@ -4,28 +4,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart'; // Reklam paketi
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:lexmory/features/game/view/splash_screen.dart';
 import 'core/app_theme.dart';
 import 'core/app_colors.dart';
 import 'features/game/services/ad_service.dart';
 
-// 1. Burayı Future<void> ve async olarak güncelle
-void main() async {
-  // 2. Flutter motorunun başlatıldığından emin ol
-  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+// --- DEBUG NAVIGATION OBSERVER ---
+class DebugNavObserver extends NavigatorObserver {
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    debugPrint('NAV: Pushing ${route.settings.name ?? route.runtimeType} | State: ${route.isActive}');
+  }
 
-  // 3. Reklam SDK'sını bekleyerek (await) başlat
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    debugPrint('NAV: Popping ${route.settings.name ?? route.runtimeType} | State: ${route.isActive}');
+    debugPrint('NAV: Returning to ${previousRoute?.settings.name ?? previousRoute?.runtimeType}');
+  }
+}
+
+void main() async {
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   await MobileAds.instance.initialize();
 
-  // 2. AdService'i hazırla ve ilk reklamı yükle
   final adService = AdService();
   adService.loadRewardedAd();
 
-  // 4. Native Splash'i tut
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-  // Oryantasyon ve sistem ayarları
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -47,6 +54,7 @@ class LexmoryApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: const SplashScreen(),
+      navigatorObservers: [DebugNavObserver()],
     );
   }
 }

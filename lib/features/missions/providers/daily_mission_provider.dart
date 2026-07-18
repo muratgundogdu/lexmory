@@ -1,8 +1,14 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:lexmory/features/library/models/chest_reward_source.dart';
+import 'package:lexmory/features/library/models/reward_presentation_event.dart';
+import 'package:lexmory/features/library/provider/collection_provider.dart';
+import 'package:lexmory/features/library/provider/reward_queue_provider.dart';
 import 'package:intl/intl.dart';
 
 import '../models/daily_mission.dart';
@@ -16,8 +22,8 @@ class DailyMissionState {
   final int weeklyBookmarks;
   final int totalBookmarks;
   final Set<String> claimedMissionIds;
-  // 🎯 YENİ: Toplanmış sandıkların eşik değerlerini tutan kalıcı hafıza seti (Örn: {7, 14})
   final Set<int> claimedChestValues;
+  final String? lastClaimedDailyChestDate;
   final bool isLoading;
 
   DailyMissionState({
@@ -27,7 +33,8 @@ class DailyMissionState {
     this.weeklyBookmarks = 0,
     this.totalBookmarks = 0,
     required this.claimedMissionIds,
-    required this.claimedChestValues, // Artık zorunlu alan
+    required this.claimedChestValues,
+    this.lastClaimedDailyChestDate,
     this.isLoading = true,
   });
 
@@ -39,6 +46,7 @@ class DailyMissionState {
     int? totalBookmarks,
     Set<String>? claimedMissionIds,
     Set<int>? claimedChestValues,
+    String? lastClaimedDailyChestDate,
     bool? isLoading,
   }) {
     return DailyMissionState(
@@ -49,6 +57,7 @@ class DailyMissionState {
       totalBookmarks: totalBookmarks ?? this.totalBookmarks,
       claimedMissionIds: claimedMissionIds ?? this.claimedMissionIds,
       claimedChestValues: claimedChestValues ?? this.claimedChestValues,
+      lastClaimedDailyChestDate: lastClaimedDailyChestDate ?? this.lastClaimedDailyChestDate,
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -66,15 +75,19 @@ class DailyMissionState {
   bool get bronzeChestReady => weeklyBookmarks >= 7 && !claimedChestValues.contains(7);
   bool get silverChestReady => weeklyBookmarks >= 14 && !claimedChestValues.contains(14);
   bool get goldChestReady => weeklyBookmarks >= 21 && !claimedChestValues.contains(21);
+
+  bool get allMissionsClaimed => missions.isNotEmpty && missions.every((m) => claimedMissionIds.contains(m.mission.id));
 }
 
 class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
-  DailyMissionNotifier()
+  final Ref _ref;
+
+  DailyMissionNotifier(this._ref)
       : super(
     DailyMissionState(
       missions: [],
       claimedMissionIds: {},
-      claimedChestValues: {}, // Varsayılan boş
+      claimedChestValues: {}, 
       isLoading: true,
     ),
   );
@@ -86,12 +99,13 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
   final String _claimedMissionIdsKey = 'claimedMissionIds';
   final String _weeklyBookmarksKey = 'weeklyBookmarks';
   final String _totalBookmarksKey = 'totalBookmarks';
-  // 🎯 YENİ: Sandık disk kayıt anahtarı
   final String _claimedChestValuesKey = 'claimedChestValues';
+  final String _lastClaimedDailyChestDateKey = 'lastClaimedDailyChestDate';
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     await _loadOrCreateDailyMissions();
+    if (!mounted) return;
     state = state.copyWith(isLoading: false);
   }
 
@@ -104,13 +118,15 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
     final savedClaimedMissionIds =
     _prefs.getStringList(_claimedMissionIdsKey)?.toSet();
 
-    // 🎯 YENİ: Diskten toplanan sandık verilerini oku
     final savedClaimedChests = _prefs.getStringList(_claimedChestValuesKey)
         ?.map((e) => int.parse(e))
         .toSet() ?? {};
 
     final savedWeeklyBookmarks = _prefs.getInt(_weeklyBookmarksKey) ?? 0;
     final savedTotalBookmarks = _prefs.getInt(_totalBookmarksKey) ?? 0;
+    final savedLastClaimedDailyChestDate = _prefs.getString(_lastClaimedDailyChestDateKey);
+    final String? lastClaimedDate = (savedLastClaimedDailyChestDate != null && savedLastClaimedDailyChestDate.isNotEmpty) 
+        ? savedLastClaimedDailyChestDate : null;
 
     DateTime? firstOpenDate = savedFirstOpenDateStr != null
         ? DateTime.parse(savedFirstOpenDateStr)
@@ -131,10 +147,12 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
     if (firstOpenDate == null) {
       firstOpenDate = DateTime.now();
       await _prefs.setString(_firstOpenDateKey, firstOpenDate.toIso8601String());
-      await _selectAndSaveNewMissions(firstOpenDate, savedWeeklyBookmarks, savedClaimedChests);
+      await _selectAndSaveNewMissions(firstOpenDate, savedWeeklyBookmarks, savedClaimedChests, shouldResetWeekly: false);
     } else if (savedCurrentMissionDate != today) {
-      await _selectAndSaveNewMissions(firstOpenDate, savedWeeklyBookmarks, savedClaimedChests);
+      final bool isResetRequired = _isNewCalendarWeek(savedCurrentMissionDate, DateTime.now());
+      await _selectAndSaveNewMissions(firstOpenDate, savedWeeklyBookmarks, savedClaimedChests, shouldResetWeekly: isResetRequired);
     } else {
+      if (!mounted) return;
       state = state.copyWith(
         firstOpenDate: firstOpenDate,
         currentMissionDate: savedCurrentMissionDate,
@@ -143,22 +161,20 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
         claimedChestValues: savedClaimedChests,
         weeklyBookmarks: savedWeeklyBookmarks,
         totalBookmarks: savedTotalBookmarks,
+        lastClaimedDailyChestDate: lastClaimedDate,
       );
     }
   }
 
   Future<void> _selectAndSaveNewMissions(
-      DateTime firstOpenDate, int currentWeeklyBookmarks, Set<int> currentClaimedChests) async {
+      DateTime firstOpenDate, int currentWeeklyBookmarks, Set<int> currentClaimedChests, {required bool shouldResetWeekly}) async {
     final now = DateTime.now();
     final dayIndex = now.difference(DateTime(firstOpenDate.year, firstOpenDate.month, firstOpenDate.day)).inDays + 1;
 
-    // 🎯 HAFTALIK SIFIRLAMA KONTROLÜ: Eğer yeni bir haftaya girildiyse (Pazartesi veya 7 gün döngüsü)
-    // Haftalık ilerleme ve toplanan sandıklar sıfırlanır
     int weeklyBookmarks = currentWeeklyBookmarks;
     Set<int> claimedChests = currentClaimedChests;
 
-    // Basit mantık: onboarding bitip yeni haftaya geçildiğinde veya dayIndex 7'ye tam bölündüğünde sıfırla
-    if (dayIndex % 7 == 1 && dayIndex > 1) {
+    if (shouldResetWeekly) {
       weeklyBookmarks = 0;
       claimedChests = {};
     }
@@ -168,6 +184,7 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
         .map((mission) => DailyMissionProgress(mission: mission))
         .toList();
 
+    if (!mounted) return;
     state = state.copyWith(
       firstOpenDate: firstOpenDate,
       currentMissionDate: DateFormat('yyyy-MM-dd').format(now),
@@ -182,7 +199,7 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
 
   List<DailyMission> _selectTodayMissions(int dayIndex) {
     List<DailyMission> selectedMissions = [];
-    final _random = Random();
+    final random = Random();
 
     if (dayIndex <= 7) {
       final missionIdsForDay = onboardingDailyMissionIds[dayIndex] ?? [];
@@ -191,10 +208,8 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
         selectedMissions.add(found);
       }
     } else {
-      // 🎯 7. GÜNDEN SONRA: TİP ÇAKIŞMASINI ENGELLEYEN AKILLI SEÇİM ALGORİTMASI
       final Set<DailyMissionType> chosenTypes = {};
 
-      // 1. Ana havuzları zorluklarına göre filtrele
       final easyPool = dailyMissionPool
           .where((m) => m.difficulty == DailyMissionDifficulty.easy)
           .toList();
@@ -205,35 +220,29 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
           .where((m) => m.difficulty == DailyMissionDifficulty.hard)
           .toList();
 
-      // --- Kural 1: KOLAY GÖREV SEÇİMİ ---
       if (easyPool.isNotEmpty) {
-        final easyMission = easyPool[_random.nextInt(easyPool.length)];
+        final easyMission = easyPool[random.nextInt(easyPool.length)];
         selectedMissions.add(easyMission);
-        chosenTypes.add(easyMission.type); // Kolay görevin tipini cebe koyduk
+        chosenTypes.add(easyMission.type);
       }
 
-      // --- Kural 2: ORTA GÖREV SEÇİMİ (Farklı Tipte) ---
-      // Kolay görevin tipiyle eşleşmeyen orta zorluktaki görevleri filtrele
       List<DailyMission> validMediumPool = mediumPool
           .where((m) => !chosenTypes.contains(m.type))
           .toList();
 
-      // Güvenlik Önlemi: Eğer havuzda görev kalmazsa orijinal orta havuzuna geri dön
       if (validMediumPool.isEmpty) validMediumPool = mediumPool;
 
-      final mediumMission = validMediumPool[_random.nextInt(validMediumPool.length)];
+      final mediumMission = validMediumPool[random.nextInt(validMediumPool.length)];
       selectedMissions.add(mediumMission);
-      chosenTypes.add(mediumMission.type); // Orta görevin tipini de kaydettik
+      chosenTypes.add(mediumMission.type);
 
-      // --- Kural 3: ZOR GÖREV SEÇİMİ (Kolay ve Ortadan Tamamen Farklı Tipte) ---
-      // Hem kolay hem orta görev tipiyle eşleşmeyen zor görevleri filtrele
       List<DailyMission> validHardPool = hardPool
           .where((m) => !chosenTypes.contains(m.type))
           .toList();
 
       if (validHardPool.isEmpty) validHardPool = hardPool;
 
-      final hardMission = validHardPool[_random.nextInt(validHardPool.length)];
+      final hardMission = validHardPool[random.nextInt(validHardPool.length)];
       selectedMissions.add(hardMission);
     }
 
@@ -250,18 +259,33 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
     await _prefs.setStringList(
         _claimedMissionIdsKey, state.claimedMissionIds.toList());
 
-    // 🎯 YENİ: Sandık durumlarını diskte String listesi olarak sakla
     await _prefs.setStringList(
         _claimedChestValuesKey, state.claimedChestValues.map((e) => e.toString()).toList());
 
     await _prefs.setInt(_weeklyBookmarksKey, state.weeklyBookmarks);
     await _prefs.setInt(_totalBookmarksKey, state.totalBookmarks);
+    await _prefs.setString(_lastClaimedDailyChestDateKey, state.lastClaimedDailyChestDate ?? '');
   }
 
   Future<void> resetForNewDayIfNeeded() async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     if (state.currentMissionDate != today) {
       await _loadOrCreateDailyMissions();
+    }
+  }
+
+  bool _isNewCalendarWeek(String? lastDateStr, DateTime now) {
+    if (lastDateStr == null || lastDateStr.isEmpty) return false;
+    try {
+      final lastDate = DateFormat('yyyy-MM-dd').parse(lastDateStr);
+      
+      // Find the Monday of each date's week
+      final lastMonday = DateTime(lastDate.year, lastDate.month, lastDate.day).subtract(Duration(days: lastDate.weekday - 1));
+      final currentMonday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+      
+      return currentMonday.isAfter(lastMonday);
+    } catch (e) {
+      return false;
     }
   }
 
@@ -284,24 +308,19 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
 
         int newProgress;
 
-        // 🎯 1. SEÇENEK: SERİ YAKALAMA GÖREVİ ÖZEL MANTIĞI
         if (type == DailyMissionType.reachStreak) {
           if (amount == -1) {
-            // 🚨 Oyuncu yandı/seriyi bozdu! Görev sayacını sıfıra çekiyoruz.
-            // (Ana streak sistemine dokunulmaz, sadece bu görevin bugünkü sayacı sıfırlanır)
             newProgress = 0;
           } else {
-            // Oyuncu o gün içinde başarılı bir adım daha attı, görevin kendi iç sayacını +1 artır.
             newProgress = missionProgress.currentProgress + amount;
           }
         } else {
-          // 🎯 DİĞER GÖREVLER: (Kelime çözme, reklam izleme vb.) normal şekilde üstüne eklenerek artar.
           newProgress = missionProgress.currentProgress + amount;
         }
 
         return missionProgress.copyWith(
           currentProgress: min(
-            max(0, newProgress), // Negatif değer almasını engellemek için koruma
+            max(0, newProgress),
             missionProgress.mission.target,
           ),
         );
@@ -309,6 +328,7 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
       return missionProgress;
     }).toList();
 
+    if (!mounted) return;
     state = state.copyWith(missions: updatedMissions);
     await saveState();
   }
@@ -328,6 +348,7 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
       return missionProgress;
     }).toList();
 
+    if (!mounted) return;
     state = state.copyWith(missions: updatedMissions);
     await saveState();
   }
@@ -354,6 +375,7 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
     final newTotalBookmarks =
         state.totalBookmarks + missionProgress.mission.rewardBookmarks;
 
+    if (!mounted) return true;
     state = state.copyWith(
       missions: updatedMissions,
       claimedMissionIds: newClaimedMissionIds,
@@ -362,33 +384,88 @@ class DailyMissionNotifier extends StateNotifier<DailyMissionState> {
     );
 
     await saveState();
+
+    // 🎯 Check if all daily missions are now claimed for the Silver Chest
+    if (state.allMissionsClaimed) {
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      if (state.lastClaimedDailyChestDate != today) {
+        try {
+          final result = await _ref.read(collectionProvider.notifier).openChestReward(ChestRewardSource.dailyMission);
+          
+          if (!mounted) return true;
+          _ref.read(rewardQueueProvider.notifier).enqueue(RewardPresentationEvent(
+            id: 'daily_${DateTime.now().millisecondsSinceEpoch}',
+            source: ChestRewardSource.dailyMission,
+            result: result,
+            createdAt: DateTime.now(),
+            title: 'Günlük Görev Tamamlandı!',
+          ));
+
+          state = state.copyWith(lastClaimedDailyChestDate: today);
+          await saveState();
+        } catch (e) {
+          debugPrint('Failed to open daily chest reward: $e');
+        }
+      }
+    }
+
     return true;
   }
 
-  // =========================================================================
-  // 🎯 YENİ: PREMIUM HAFTALIK SANDIK ÖDÜL KİLİTLEME METODU (BUG KORUMALI)
-  // =========================================================================
   Future<bool> claimWeeklyChest(int chestValue) async {
-    // 1. Oyuncu gerekli ayraç eşiğine ulaşmış mı?
     if (state.weeklyBookmarks < chestValue) return false;
 
-    // 2. Bu sandık daha önce toplanmış mı? (Double-claim koruması)
     if (state.claimedChestValues.contains(chestValue)) return false;
 
-    // 3. State'i güncelle ve sandığı toplananlar listesine kilitle
     final newClaimedChests = Set<int>.from(state.claimedChestValues)..add(chestValue);
 
+    if (!mounted) return true;
     state = state.copyWith(
       claimedChestValues: newClaimedChests,
     );
 
-    // 4. Diske kalıcı olarak kaydet
     await saveState();
+
+    // 🎯 Check weekly milestones for chests
+    String? chestTypeId;
+    String? milestoneTitle;
+    
+    if (chestValue == 7) {
+      chestTypeId = 'wooden_chest';
+      milestoneTitle = 'Bronz Hedef Tamamlandı!';
+    } else if (chestValue == 14) {
+      chestTypeId = 'silver_chest';
+      milestoneTitle = 'Gümüş Hedef Tamamlandı!';
+    } else if (chestValue == 21) {
+      chestTypeId = 'golden_chest';
+      milestoneTitle = 'Altın Hedef Tamamlandı!';
+    }
+
+    if (chestTypeId != null) {
+      try {
+        final result = await _ref.read(collectionProvider.notifier).openChestReward(
+          ChestRewardSource.weeklyMission, 
+          chestTypeId: chestTypeId,
+        );
+        
+        if (!mounted) return true;
+        _ref.read(rewardQueueProvider.notifier).enqueue(RewardPresentationEvent(
+          id: 'weekly_${chestValue}_${DateTime.now().millisecondsSinceEpoch}',
+          source: ChestRewardSource.weeklyMission,
+          result: result,
+          createdAt: DateTime.now(),
+          title: milestoneTitle,
+        ));
+      } catch (e) {
+        debugPrint('Failed to open weekly chest reward ($chestValue): $e');
+      }
+    }
+
     return true;
   }
 }
 
 final dailyMissionProvider =
 StateNotifierProvider<DailyMissionNotifier, DailyMissionState>((ref) {
-  return DailyMissionNotifier()..init();
+  return DailyMissionNotifier(ref)..init();
 });

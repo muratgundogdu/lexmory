@@ -3,12 +3,12 @@ import '../../../../core/app_colors.dart';
 
 class DailyMissionButton extends StatelessWidget {
   final bool hasPendingDailyMission;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const DailyMissionButton({
     super.key,
     required this.hasPendingDailyMission,
-    required this.onPressed,
+    this.onPressed,
   });
 
   @override
@@ -44,7 +44,7 @@ class DailyMissionButton extends StatelessWidget {
                     border: Border.all(color: AppColors.background, width: 1.2),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryLight.withOpacity(0.4),
+                        color: AppColors.primaryLight.withValues(alpha:0.4),
                         blurRadius: 3,
                         spreadRadius: 0.5,
                       ),

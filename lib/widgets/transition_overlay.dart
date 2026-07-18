@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../core/debug_config.dart';
 
 class TransitionOverlay extends StatefulWidget {
   final String? message;
@@ -58,10 +59,7 @@ class _TransitionOverlayState extends State<TransitionOverlay> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.stars_rounded, color: Colors.amber, size: 60)
-                    .animate()
-                    .scale(duration: 600.ms, curve: Curves.elasticOut)
-                    .shimmer(delay: 600.ms),
+                _buildIcon(),
                 const SizedBox(height: 15),
                 Text(
                   widget.message!,
@@ -82,5 +80,16 @@ class _TransitionOverlayState extends State<TransitionOverlay> {
             .fadeOut(delay: 2.seconds, duration: 400.ms),
       ),
     ).animate().fadeIn(duration: 300.ms).fadeOut(delay: 2.2.seconds, duration: 300.ms);
+  }
+
+  Widget _buildIcon() {
+    final iconWidget = const Icon(Icons.stars_rounded, color: Colors.amber, size: 60)
+        .animate()
+        .scale(duration: 600.ms, curve: Curves.elasticOut);
+
+    if (DebugConfig.enableShimmers) {
+      return iconWidget.shimmer(delay: 600.ms);
+    }
+    return iconWidget;
   }
 }

@@ -1,14 +1,20 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // Riverpod import'u eklendi
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/app_dimens.dart';
 import '../../../core/app_typography.dart';
-import '../providers/game_provider.dart'; // GameProvider import'u eklendi
+import '../../../core/debug_config.dart';
+import '../../library/models/chest_open_result.dart';
+import '../../library/models/card_reward_result.dart';
+import '../../library/widgets/reward_rarity_style.dart';
+import '../../library/widgets/reward_ribbon.dart';
+import '../providers/game_provider.dart';
 
-// ConsumerWidget kullanarak GameNotifier'daki state değişikliklerini dinleyebiliriz
 class CategoryCompleteOverlay extends ConsumerWidget {
   final bool isVisible;
   final String categoryName;
@@ -16,7 +22,6 @@ class CategoryCompleteOverlay extends ConsumerWidget {
   final int totalJokers;
   final int sectionCount;
   final VoidCallback onContinue;
-  // onDoubleReward ve hasDoubleClaimed parametreleri artık GameState'ten okunacağı için kaldırıldı
 
   const CategoryCompleteOverlay({
     super.key,
@@ -26,70 +31,60 @@ class CategoryCompleteOverlay extends ConsumerWidget {
     required this.totalJokers,
     required this.sectionCount,
     required this.onContinue,
-    // onDoubleReward ve hasDoubleClaimed kaldırıldı
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) { // ConsumerWidget için WidgetRef parametresi eklendi
+  Widget build(BuildContext context, WidgetRef ref) {
     if (!isVisible) return const SizedBox.shrink();
 
-    // GameNotifier'daki ilgili state'leri dinle
-    final gameNotifierState = ref.watch(gameProvider); // GameState nesnesi dinleniyor
+    final gameNotifierState = ref.watch(gameProvider);
     final bool hasDoubleClaimed = gameNotifierState.hasClaimedDoubleReward;
     final int displayedCategoryBonus = gameNotifierState.displayedCategoryBonus;
     final bool isDoubleRewardClaiming = gameNotifierState.isClaimingDoubleReward;
+    final ChestOpenResult? rewardResult = gameNotifierState.categoryRewardResult;
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-      child: Container(
-        color: AppColors.background.withValues(alpha: 0.92),
-        width: double.infinity,
-        height: double.infinity,
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(
-                top: AppDimens.s40,
-                bottom: 120, // NavBar yüksekliğini kompanse eder
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // 1. Üst Başlık (Premium Tracking Effect)
-                  _buildHeader(),
-
-                  const SizedBox(height: AppDimens.s40),
-
-                  // 2. Kazanılan Kitap (Görsel Odak)
-                  _buildBookVisual(categoryName), // categoryName'i parametre olarak geçir
-
-                  const SizedBox(height: AppDimens.s32),
-
-                  // 3. Ödül Bilgisi (+150 Token)
-                  _buildRewardBadge(
-                    hasDoubleClaimed,
-                    displayedCategoryBonus,
-                    isDoubleRewardClaiming,
-                    // onDoubleReward callback yerine GameNotifier metodunu çağır
-                        () => ref.read(gameProvider.notifier).doubleRewardWithAd(),
-                  ),
-
-                  const SizedBox(height: AppDimens.s40),
-
-                  // 4. İstatistik Paneli
-                  _buildStatsGrid(totalWrong, totalJokers, sectionCount), // Parametreleri geçir
-
-                  const SizedBox(height: AppDimens.s48),
-
-                  // 5. Devam Et Butonu
-                  _buildContinueButton(onContinue), // onContinue'ı parametre olarak geçir
-                ],
-              ),
+    final Widget overlayContent = Container(
+      color: AppColors.background.withValues(alpha: DebugConfig.enableBackdropBlurs ? 0.92 : 0.98),
+      width: double.infinity,
+      height: double.infinity,
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              top: AppDimens.s40,
+              bottom: 120,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: AppDimens.s40),
+                _buildRewardGallery(rewardResult),
+                const SizedBox(height: AppDimens.s32),
+                _buildRewardBadge(
+                  hasDoubleClaimed,
+                  displayedCategoryBonus,
+                  isDoubleRewardClaiming,
+                  () => ref.read(gameProvider.notifier).doubleRewardWithAd(),
+                ),
+                const SizedBox(height: AppDimens.s40),
+                _buildStatsGrid(totalWrong, totalJokers, sectionCount),
+                const SizedBox(height: AppDimens.s48),
+                _buildContinueButton(onContinue),
+              ],
             ),
           ),
         ),
       ),
     );
+
+    if (DebugConfig.enableBackdropBlurs) {
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: overlayContent,
+      );
+    }
+    return overlayContent;
   }
 
   Widget _buildHeader() {
@@ -104,7 +99,7 @@ class CategoryCompleteOverlay extends ConsumerWidget {
         ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2),
         const SizedBox(height: AppDimens.s8),
         Text(
-          "KÜTÜPHANENE EKLENDİ",
+          "KOLEKSİYON ÖDÜLLERİ",
           style: AppTypography.pageTitle.copyWith(
             fontSize: 20,
             color: AppColors.textPrimary,
@@ -115,90 +110,83 @@ class CategoryCompleteOverlay extends ConsumerWidget {
     );
   }
 
-  // categoryName parametresi eklendi
-  Widget _buildBookVisual(String categoryName) {
-    return Container(
-      width: 150,
-      height: 200,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: const BorderRadius.only(
-          topRight: Radius.circular(AppDimens.radiusMedium),
-          bottomRight: Radius.circular(AppDimens.radiusMedium),
-          topLeft: Radius.circular(4),
-          bottomLeft: Radius.circular(4),
+  Widget _buildRewardGallery(ChestOpenResult? result) {
+    if (result == null || result.rewards.isEmpty) {
+      if (kDebugMode) {
+        debugPrint("Warning: CategoryCompleteOverlay rewardResult is null or empty!");
+      }
+      return Center(
+        child: Text(
+          "Koleksiyon ödülü gösterilemedi.",
+          style: AppTypography.bodyMedium.copyWith(color: Colors.white24),
         ),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.4),
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.2),
-            blurRadius: 40,
-            spreadRadius: 2,
-          ),
-          const BoxShadow(
-            color: Colors.black54,
-            offset: Offset(-12, 12),
-            blurRadius: 20,
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          // Kitap Sırtı Detayı (Texture)
-          Positioned(
-            left: 10,
-            top: 20,
-            bottom: 20,
-            child: Container(
-              width: 1.5,
-              color: AppColors.primary.withValues(alpha: 0.3),
+      );
+    }
+
+    final rewards = result.rewards;
+    
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final int count = rewards.length;
+        
+        if (count == 1) {
+          return Center(
+            child: SizedBox(
+              width: 160,
+              height: 220,
+              child: CategoryRewardCard(reward: rewards[0]),
             ),
-          ),
-          // İçerik
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.menu_book_rounded, color: AppColors.primary, size: 36),
-                  const SizedBox(height: 16),
-                  Text(
-                    categoryName.toUpperCase(),
-                    textAlign: TextAlign.center,
-                    style: AppTypography.cardTitle.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                      color: AppColors.textPrimary,
-                    ),
+          ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack);
+        }
+
+        if (count <= 3) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: rewards.map((r) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: AspectRatio(
+                    aspectRatio: 0.72,
+                    child: CategoryRewardCard(reward: r),
                   ),
-                ],
-              ),
+                ),
+              )).toList(),
+            ),
+          ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.1);
+        }
+
+        return SizedBox(
+          height: 200,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            itemCount: count,
+            separatorBuilder: (context, index) => const SizedBox(width: 16),
+            itemBuilder: (context, index) => SizedBox(
+              width: 140,
+              child: CategoryRewardCard(reward: rewards[index]),
             ),
           ),
-        ],
-      ),
-    ).animate().scale(
-      duration: 800.ms,
-      curve: Curves.easeOutBack,
-    ).shimmer(delay: 1.seconds, duration: 2.seconds, color: Colors.white12);
+        ).animate().fadeIn(duration: 600.ms);
+      },
+    );
   }
 
-  // Yeni parametrelerle güncellendi
   Widget _buildRewardBadge(
-      bool hasDoubleClaimed,
-      int displayedCategoryBonus,
-      bool isDoubleRewardClaiming,
-      VoidCallback onDoubleRewardAction, // GameNotifier metodunu çağıran callback
-      ) {
+    bool hasDoubleClaimed,
+    int displayedCategoryBonus,
+    bool isDoubleRewardClaiming,
+    VoidCallback onDoubleRewardAction,
+  ) {
+    final shimmerEffect = DebugConfig.enableShimmers
+        ? (Animate p) => p.shimmer(delay: 2.seconds, duration: 1.seconds, color: Colors.white24)
+        : (Animate p) => p.scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 1.seconds);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Ana Ödül Rozeti
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
@@ -212,7 +200,7 @@ class CategoryCompleteOverlay extends ConsumerWidget {
               const Text("🪙", style: TextStyle(fontSize: 20)),
               const SizedBox(width: 10),
               Text(
-                "+${displayedCategoryBonus} TOKEN KAZANILDI", // GameState'ten gelen dinamik değer
+                "+$displayedCategoryBonus TOKEN KAZANILDI",
                 style: AppTypography.labelSmall.copyWith(
                   color: AppColors.primary,
                   fontWeight: FontWeight.w900,
@@ -223,68 +211,65 @@ class CategoryCompleteOverlay extends ConsumerWidget {
           ),
         ).animate().fadeIn(delay: 400.ms).scale(begin: const Offset(0.8, 0.8)),
 
-        // Eğer x2 ödül zaten alınmadıysa (hasDoubleClaimed == false) x2 butonunu göster
         if (!hasDoubleClaimed) ...[
           const SizedBox(width: 12),
           GestureDetector(
-            onTap: isDoubleRewardClaiming ? null : onDoubleRewardAction, // İşlemde ise tıklanamaz yap
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFD4A574), Color(0xFFF2C078)], // Altın Gradyan
-                ),
-                borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFD4A574).withValues(alpha: 0.4),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                  )
-                ],
-              ),
-              child: Row(
-                children: [
-                  isDoubleRewardClaiming // İşlemde ise loading spinner göster
-                      ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                  )
-                      : const Icon(Icons.play_circle_fill, size: 16, color: Colors.black),
-                  const SizedBox(width: 4),
-                  Text(
-                    "x2",
-                    style: AppTypography.labelSmall.copyWith(
-                      color: Colors.black,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                    ),
+            onTap: isDoubleRewardClaiming ? null : onDoubleRewardAction,
+            child: shimmerEffect(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFD4A574), Color(0xFFF2C078)],
                   ),
-                ],
-              ),
-            )
-            // SÜREKLİ BÜYÜYÜP KÜÇÜLME ANİMASYONU
-                .animate(
-              // Sadece işlemde değilse animasyonu tekrarla
-                onPlay: (controller) => isDoubleRewardClaiming ? null : controller.repeat(reverse: true)
-            )
-                .scale(
-              begin: const Offset(1, 1),
-              end: const Offset(1.15, 1.15),
-              duration: 800.ms,
-              curve: Curves.easeInOut,
-            )
-            // ARADA BİR PARLAMA (SHIMMER) EFEKTİ
-                .animate()
-                .shimmer(delay: 2.seconds, duration: 1.seconds, color: Colors.white24),
+                  borderRadius: BorderRadius.circular(AppDimens.radiusLarge),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFD4A574).withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    )
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    if (isDoubleRewardClaiming)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                      )
+                    else
+                      const Icon(Icons.play_circle_fill, size: 16, color: Colors.black),
+                    const SizedBox(width: 4),
+                    Text(
+                      "x2",
+                      style: AppTypography.labelSmall.copyWith(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate(onPlay: (c) {
+                if (!const bool.fromEnvironment('FLUTTER_TEST')) {
+                  if (!isDoubleRewardClaiming) c.repeat(reverse: true);
+                }
+              })
+              .scale(begin: const Offset(1, 1), end: const Offset(1.15, 1.15), duration: 800.ms, curve: Curves.easeInOut)
+              .animate(onPlay: (c) {
+                if (!const bool.fromEnvironment('FLUTTER_TEST')) {
+                  c.repeat();
+                }
+              })
+            ),
           ).animate().fadeIn(delay: 600.ms).slideX(begin: 0.2),
         ],
       ],
     );
   }
 
-  // Parametreleri aldı
   Widget _buildStatsGrid(int totalWrong, int totalJokers, int sectionCount) {
     return Container(
       width: 320,
@@ -311,25 +296,17 @@ class CategoryCompleteOverlay extends ConsumerWidget {
         Icon(icon, color: AppColors.textMuted, size: 20),
         const SizedBox(height: 8),
         Text(
-            value,
-            style: AppTypography.bodyLarge.copyWith(
-                fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary
-            )
+          value,
+          style: AppTypography.bodyLarge.copyWith(fontWeight: FontWeight.w900, color: AppColors.textPrimary)
         ),
         Text(
-            label,
-            style: AppTypography.labelSmall.copyWith(
-                fontSize: 9,
-                color: AppColors.textMuted,
-                fontWeight: FontWeight.w500
-            )
+          label,
+          style: AppTypography.labelSmall.copyWith(fontSize: 9, color: AppColors.textMuted, fontWeight: FontWeight.w500)
         ),
       ],
     );
   }
 
-  // onContinue parametresi eklendi
   Widget _buildContinueButton(VoidCallback onContinue) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppDimens.s48),
@@ -360,5 +337,88 @@ class CategoryCompleteOverlay extends ConsumerWidget {
         ),
       ),
     ).animate().fadeIn(delay: 800.ms);
+  }
+}
+
+class CategoryRewardCard extends StatelessWidget {
+  final CardRewardResult reward;
+
+  const CategoryRewardCard({super.key, required this.reward});
+
+  @override
+  Widget build(BuildContext context) {
+    final card = reward.card;
+    final rarityStyle = RewardRarityStyle.from(card.rarity);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: rarityStyle.borderColor, width: 2),
+        boxShadow: rarityStyle.glow,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // Background Image
+          Positioned.fill(
+            child: Image.asset(
+              card.imagePath,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => const Center(
+                child: Icon(Icons.style_rounded, size: 40, color: Colors.white10),
+              ),
+            ),
+          ),
+          
+          // Info Overlay
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    card.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    card.setName,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      color: rarityStyle.accentColor.withValues(alpha: 0.7),
+                      fontSize: 8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Ribbon Badge
+          RewardRibbon(
+            isNew: reward.isNew,
+            duplicateTokenValue: reward.duplicateTokenValue,
+          ),
+        ],
+      ),
+    );
   }
 }

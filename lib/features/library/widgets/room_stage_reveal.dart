@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -7,17 +6,17 @@ import 'package:flutter/material.dart';
 class RoomStageReveal extends StatefulWidget {
   final String roomId;
   final int stageIndex;
+  final int? targetStageIndex; // Added to decouple animation from persistent state
   final int? revealFromStage;
   final Animation<double> revealAnimation;
-  final bool showSparkles;
 
   const RoomStageReveal({
     super.key,
     required this.roomId,
     required this.stageIndex,
+    this.targetStageIndex,
     required this.revealFromStage,
     required this.revealAnimation,
-    this.showSparkles = false,
   });
 
   @override
@@ -25,62 +24,90 @@ class RoomStageReveal extends StatefulWidget {
 }
 
 class _RoomStageRevealState extends State<RoomStageReveal> {
-  String _asset(int stage) =>
-      'lib/assets/library/${widget.roomId}/room_stage_$stage.webp';
+  String _asset(int stage) {
+    final String prefix = widget.roomId == 'room_03' ? 'room_state' : 'room_stage';
+    return 'lib/assets/library/${widget.roomId}/${prefix}_$stage.webp';
+  }
 
   @override
   Widget build(BuildContext context) {
     final bool isRevealing = widget.revealFromStage != null;
-    final int baseStage =
-        isRevealing ? widget.revealFromStage! : widget.stageIndex;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _stageImage(_asset(baseStage)),
+    if (!isRevealing) {
+      return _stageImage(_asset(widget.stageIndex));
+    }
 
-        if (isRevealing)
-          AnimatedBuilder(
-            animation: widget.revealAnimation,
-            builder: (context, _) {
-              final t = widget.revealAnimation.value;
-              final opacity = _interval(t, 0.12, 1.0, Curves.easeOutCubic);
-              final scaleY = _interval(t, 0.0, 0.88, Curves.easeOutCubic, begin: 0.92, endValue: 1.0);
-              final blur = _interval(t, 0.0, 0.55, Curves.easeOut, begin: 5.0, endValue: 0.0);
-              final shimmer = _interval(t, 0.0, 0.35, Curves.easeOut, begin: 0.45, endValue: 0.0);
+    return AnimatedBuilder(
+      animation: widget.revealAnimation,
+      builder: (context, _) {
+        final t = widget.revealAnimation.value;
+        const double contactPoint = 0.65;
+        final bool hasContacted = t >= contactPoint;
 
-              return Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (shimmer > 0)
-                    ColoredBox(
-                      color: const Color(0xFFF2C078).withValues(alpha: shimmer * 0.22),
-                    ),
-                  ImageFiltered(
-                    imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                    child: Opacity(
-                      opacity: opacity,
-                      child: Transform(
-                        alignment: Alignment.bottomCenter,
-                        transform: Matrix4.diagonal3Values(1, scaleY, 1),
-                        child: _stageImage(_asset(widget.stageIndex)),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+        // 1. Background Logic: Switch from old to new exactly at contact
+        // If targetStageIndex is provided, use it as the "new" stage to avoid dependency on provider state timing
+        final int nextStage = widget.targetStageIndex ?? widget.stageIndex;
+        final int backgroundStage = hasContacted ? nextStage : widget.revealFromStage!;
 
-        if (isRevealing && widget.showSparkles)
-          AnimatedBuilder(
-            animation: widget.revealAnimation,
-            builder: (context, _) => _StageSparkleOverlay(
-              progress: widget.revealAnimation.value,
-              seed: widget.revealFromStage!,
+        // 2. Overlay Logic: Landing object
+        // It arrives from 0.0 to 0.65
+        final double arrivalOpacity = _interval(t, 0.0, 0.3, Curves.easeIn);
+        final double arrivalScale = _interval(t, 0.0, contactPoint, Curves.easeOutBack, begin: 0.85, endValue: 1.0);
+        final double arrivalTranslateY = _interval(t, 0.0, contactPoint, Curves.easeOutCubic, begin: -30.0, endValue: 0.0);
+
+        // It fades out rapidly after contact to merge with the background
+        final double overlayFadeOut = _interval(t, contactPoint, contactPoint + 0.15, Curves.easeOut, begin: 1.0, endValue: 0.0);
+
+        // 3. Impact Settle Logic: Applied to the WHOLE background at contact
+        final double impactScale = _interval(t, contactPoint, 1.0, Curves.elasticOut, begin: 1.02, endValue: 1.0);
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // BASE LAYER: Switches from Old Room to New Room
+            Transform.scale(
+              scale: hasContacted ? impactScale : 1.0,
+              child: _stageImage(_asset(backgroundStage)),
             ),
+
+            // ANIMATED OVERLAY: The incoming object (represented by the next stage image)
+            if (!hasContacted || overlayFadeOut > 0)
+              Opacity(
+                opacity: hasContacted ? overlayFadeOut : arrivalOpacity,
+                child: Transform.translate(
+                  offset: Offset(0, hasContacted ? 0 : arrivalTranslateY),
+                  child: Transform.scale(
+                    scale: hasContacted ? 1.0 : arrivalScale,
+                    alignment: Alignment.bottomCenter,
+                    child: _stageImage(_asset(nextStage)),
+                  ),
+                ),
+              ),
+
+            // GLOW/SPARKLE EFFECT
+            if (hasContacted)
+               _buildImpactGlow(t, contactPoint),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildImpactGlow(double t, double contactPoint) {
+    final double glowOpacity = _interval(t, contactPoint, contactPoint + 0.3, Curves.easeOut, begin: 0.4, endValue: 0.0);
+    if (glowOpacity <= 0) return const SizedBox.shrink();
+
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            colors: [
+              const Color(0xFFF2C078).withValues(alpha: glowOpacity),
+              Colors.transparent,
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 
@@ -107,69 +134,4 @@ class _RoomStageRevealState extends State<RoomStageReveal> {
     if (t >= end) return endValue;
     return begin + (endValue - begin) * curve.transform((t - start) / (end - start));
   }
-}
-
-class _StageSparkleOverlay extends StatelessWidget {
-  final double progress;
-  final int seed;
-
-  const _StageSparkleOverlay({required this.progress, required this.seed});
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: CustomPaint(
-        painter: _SparklePainter(progress: progress, seed: seed),
-        size: Size.infinite,
-      ),
-    );
-  }
-}
-
-class _SparklePainter extends CustomPainter {
-  final double progress;
-  final int seed;
-
-  _SparklePainter({required this.progress, required this.seed});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (progress <= 0 || progress >= 1) return;
-
-    final rng = Random(seed * 9973);
-    const particleCount = 28;
-
-    for (int i = 0; i < particleCount; i++) {
-      final birth = rng.nextDouble() * 0.45;
-      final life = 0.25 + rng.nextDouble() * 0.45;
-      final localT = ((progress - birth) / life).clamp(0.0, 1.0);
-      if (localT <= 0 || localT >= 1) continue;
-
-      final x = rng.nextDouble() * size.width;
-      final baseY = size.height * (0.35 + rng.nextDouble() * 0.55);
-      final y = baseY - localT * (40 + rng.nextDouble() * 60);
-      final radius = 1.2 + rng.nextDouble() * 2.8;
-      final alpha = sin(localT * pi) * (0.25 + rng.nextDouble() * 0.55);
-
-      final paint = Paint()
-        ..color = Color.lerp(
-          const Color(0xFFD4A574),
-          const Color(0xFFF2C078),
-          rng.nextDouble(),
-        )!.withValues(alpha: alpha);
-
-      canvas.drawCircle(Offset(x, y), radius, paint);
-
-      if (rng.nextBool()) {
-        final glow = Paint()
-          ..color = const Color(0xFFF2C078).withValues(alpha: alpha * 0.35)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-        canvas.drawCircle(Offset(x, y), radius * 2.2, glow);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SparklePainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.seed != seed;
 }

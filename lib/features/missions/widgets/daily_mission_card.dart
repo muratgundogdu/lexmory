@@ -42,24 +42,23 @@ class _DailyMissionCardState extends State<DailyMissionCard> with SingleTickerPr
 
     bool isClaimed = widget.mission.isClaimed;
     bool isClaimable = currentProgress >= targetProgress && !isClaimed;
-    bool isOngoing = currentProgress < targetProgress;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4), // Sheet içi boşluk düzeni için optimize edildi
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         // Toplanmış kartların tasarımı premium koyu arka plana sadık kalacak şekilde revize edildi
-        color: isClaimed ? AppColors.surfaceElevated.withOpacity(0.4) : AppColors.surface,
+        color: isClaimed ? AppColors.surfaceElevated.withValues(alpha:0.4) : AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isClaimed
-              ? AppColors.primary.withOpacity(0.2)
-              : (isClaimable ? AppColors.primaryLight.withOpacity(0.4) : AppColors.surfaceElevated),
+              ? AppColors.primary.withValues(alpha:0.2)
+              : (isClaimable ? AppColors.primaryLight.withValues(alpha:0.4) : AppColors.surfaceElevated),
           width: isClaimable || isClaimed ? 1.5 : 1,
         ),
         boxShadow: isClaimable ? [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.08),
+            color: AppColors.primary.withValues(alpha:0.08),
             blurRadius: 12,
             spreadRadius: 1,
           )
@@ -76,7 +75,7 @@ class _DailyMissionCardState extends State<DailyMissionCard> with SingleTickerPr
               Expanded(
                 child: Text(
                   widget.mission.mission.title,
-                  style: AppTypography.bodyLarge?.copyWith(
+                  style: AppTypography.bodyLarge.copyWith(
                     color: isClaimed ? AppColors.textSecondary : AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
@@ -133,31 +132,44 @@ class _DailyMissionCardState extends State<DailyMissionCard> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Text('🪙', style: TextStyle(fontSize: 13)),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${widget.mission.mission.rewardTokens} Token',
-                    style: TextStyle(
-                      color: isClaimed ? AppColors.textSecondary : AppColors.primaryLight,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Text('🪙', style: TextStyle(fontSize: 13)),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        '${widget.mission.mission.rewardTokens} Token',
+                        style: TextStyle(
+                          color: isClaimed ? AppColors.textSecondary : AppColors.primaryLight,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text('📖', style: TextStyle(fontSize: 13)),
-                  const SizedBox(width: 4),
-                  Text(
-                    '+${widget.mission.mission.rewardBookmarks} Ayraç',
-                    style: TextStyle(
+                    const SizedBox(width: 12),
+                    Icon(
+                      Icons.menu_book_rounded,
                       color: isClaimed ? AppColors.textSecondary : AppColors.primary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      size: 14,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        '+${widget.mission.mission.rewardBookmarks} Ayraç',
+                        style: TextStyle(
+                          color: isClaimed ? AppColors.textSecondary : AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               if (isClaimable)
                 AnimatedBuilder(
                   animation: _pulseController,
@@ -172,8 +184,9 @@ class _DailyMissionCardState extends State<DailyMissionCard> with SingleTickerPr
                       return ElevatedButton(
                         onPressed: () {
                           final RenderBox box = btnCtx.findRenderObject() as RenderBox;
-                          // Butonun tam orta noktasından ayraç fırlaması için koordinat paslanıyor
-                          widget.onClaim(box.localToGlobal(Offset.zero));
+                          // Find center of the button for better animation start point
+                          final center = box.localToGlobal(Offset(box.size.width / 2, box.size.height / 2));
+                          widget.onClaim(center);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
@@ -181,7 +194,7 @@ class _DailyMissionCardState extends State<DailyMissionCard> with SingleTickerPr
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 3,
-                          shadowColor: AppColors.primary.withOpacity(0.4),
+                          shadowColor: AppColors.primary.withValues(alpha:0.4),
                         ),
                         child: const Text(
                           'ÖDÜLÜ AL',

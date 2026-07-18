@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../core/app_colors.dart';
 import '../core/app_dimens.dart';
 import '../core/app_typography.dart';
+import '../core/debug_config.dart';
 
 class PremiumRewardOverlay extends StatelessWidget {
   final bool isVisible;
@@ -27,70 +28,76 @@ class PremiumRewardOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!isVisible) return const SizedBox.shrink();
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-      child: Container(
-        color: AppColors.background.withValues(alpha: 0.85),
-        width: double.infinity,
-        height: double.infinity,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 1. İhtişamlı Başlık (Mükemmel/Tebrikler ayrımı içeride yapılıyor)
-              _buildHeader(),
+    final Widget overlayContent = Container(
+      color: AppColors.background.withValues(alpha: DebugConfig.enableBackdropBlurs ? 0.85 : 0.95),
+      width: double.infinity,
+      height: double.infinity,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 1. İhtişamlı Başlık (Mükemmel/Tebrikler ayrımı içeride yapılıyor)
+            _buildHeader(),
 
-              const SizedBox(height: AppDimens.s32),
+            const SizedBox(height: AppDimens.s32),
 
-              // 2. Ana Ödül Kartı (Detaylı Puanlama)
-              _buildRewardCard(),
+            // 2. Ana Ödül Kartı (Detaylı Puanlama)
+            _buildRewardCard(),
 
-              const SizedBox(height: AppDimens.s48),
+            const SizedBox(height: AppDimens.s48),
 
-              // 3. Alt Bilgi (Spinner kaldırıldı, daha temiz shimmer yazı eklendi)
-              _buildFooterText(),
-            ],
-          ),
+            // 3. Alt Bilgi (Spinner kaldırıldı, daha temiz shimmer yazı eklendi)
+            _buildFooterText(),
+          ],
         ),
       ),
     );
+
+    if (DebugConfig.enableBackdropBlurs) {
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: overlayContent,
+      );
+    }
+    return overlayContent;
   }
 
-  Widget _buildHeader() {final bool isPerfect = memoryBonus > 0 && masterBonus > 0;
-  final String title = isPerfect ? "MÜKEMMEL" : "TEBRİKLER";
+  Widget _buildHeader() {
+    final bool isPerfect = memoryBonus > 0 && masterBonus > 0;
+    final String title = isPerfect ? "MÜKEMMEL" : "TEBRİKLER";
 
-  return Column(
-    children: [
-      const Text("✨", style: TextStyle(fontSize: 40))
-          .animate()
-          .scale(duration: 600.ms, curve: Curves.easeOutBack),
-      const SizedBox(height: AppDimens.s8),
-      // Harf aralığı animasyonu için .custom kullanıyoruz
-      Text(
-        title,
-        style: AppTypography.displayLarge.copyWith(
-          color: AppColors.primary,
-          fontSize: 24,
-        ),
-      )
-          .animate()
-          .fadeIn(duration: 400.ms)
-          .custom(
-        begin: 15, // Başlangıç letterSpacing
-        end: 8,    // Bitiş letterSpacing
-        duration: 600.ms,
-        curve: Curves.easeOutCubic,
-        builder: (context, value, child) => Text(
+    return Column(
+      children: [
+        const Text("✨", style: TextStyle(fontSize: 40))
+            .animate()
+            .scale(duration: 600.ms, curve: Curves.easeOutBack),
+        const SizedBox(height: AppDimens.s8),
+        // Harf aralığı animasyonu için .custom kullanıyoruz
+        Text(
           title,
           style: AppTypography.displayLarge.copyWith(
             color: AppColors.primary,
-            letterSpacing: value, // Animasyonlu değer buraya geliyor
             fontSize: 24,
           ),
+        )
+            .animate()
+            .fadeIn(duration: 400.ms)
+            .custom(
+          begin: 15, // Başlangıç letterSpacing
+          end: 8,    // Bitiş letterSpacing
+          duration: 600.ms,
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) => Text(
+            title,
+            style: AppTypography.displayLarge.copyWith(
+              color: AppColors.primary,
+              letterSpacing: value, // Animasyonlu değer buraya geliyor
+              fontSize: 24,
+            ),
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
   }
 
   Widget _buildRewardCard() {
@@ -205,14 +212,22 @@ class PremiumRewardOverlay extends StatelessWidget {
   }
 
   Widget _buildFooterText() {
-    return Text(
+    final textWidget = Text(
       "YENİ BÖLÜM HAZIRLANIYOR",
       style: AppTypography.labelSmall.copyWith(
         color: AppColors.textMuted,
         letterSpacing: 4,
       ),
-    ).animate(onPlay: (c) => c.repeat())
-        .shimmer(duration: 2.seconds, color: AppColors.primary)
+    );
+
+    if (DebugConfig.enableShimmers) {
+      return textWidget.animate(onPlay: (c) => c.repeat())
+          .shimmer(duration: 2.seconds, color: AppColors.primary)
+          .fadeIn(delay: 1000.ms);
+    }
+
+    return textWidget.animate(onPlay: (c) => c.repeat(reverse: true))
+        .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 1.seconds)
         .fadeIn(delay: 1000.ms);
   }
 }

@@ -10,7 +10,7 @@ import '../../game/providers/game_provider.dart';
 import '../models/daily_mission.dart';
 import '../providers/daily_mission_provider.dart';
 import '../widgets/daily_mission_card.dart';
-import '../widgets/weekley_bookmark_progress.dart';
+import '../widgets/weekly_collection_card.dart';
 
 class DailyMissionSheet extends ConsumerStatefulWidget {
   const DailyMissionSheet({super.key});
@@ -23,6 +23,11 @@ class _DailyMissionSheetState extends ConsumerState<DailyMissionSheet> {
   late Timer _countdownTimer;
   Duration _timeUntilReset = const Duration(hours: 23, minutes: 59, seconds: 59);
 
+  // Animation Queue & Visual State
+  final List<_PendingAnimation> _animationQueue = [];
+  bool _isAnimating = false;
+  int? _visualWeeklyBookmarks;
+
   @override
   void initState() {
     super.initState();
@@ -34,6 +39,38 @@ class _DailyMissionSheetState extends ConsumerState<DailyMissionSheet> {
   void dispose() {
     _countdownTimer.cancel();
     super.dispose();
+  }
+
+  void _syncVisualBookmarks(int actualValue) {
+    _visualWeeklyBookmarks ??= actualValue;
+  }
+
+  void _enqueueAnimation(Offset startOffset, int rewardAmount) {
+    // Respect reduced motion if enabled
+    if (MediaQuery.maybeOf(context)?.accessibleNavigation ?? false) {
+      setState(() {
+        _visualWeeklyBookmarks = (_visualWeeklyBookmarks ?? 0) + rewardAmount;
+      });
+      final state = WeeklyCollectionCard.progressTargetKey.currentContext?.findAncestorStateOfType<WeeklyCollectionCardState>();
+      state?.pulse();
+      return;
+    }
+
+    _animationQueue.add(_PendingAnimation(startOffset: startOffset, rewardAmount: rewardAmount));
+    _processNextAnimation();
+  }
+
+  void _processNextAnimation() {
+    if (_animationQueue.isEmpty || _isAnimating) return;
+
+    final pending = _animationQueue.removeAt(0);
+    _isAnimating = true;
+
+    // We need to wait for a frame to ensure target is rendered if it just appeared
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showFlyingBookmarkAnimation(context, pending);
+    });
   }
 
   /// Gece 00:00'a kalan süreyi sistem saatine bağımlı ve kesin olarak hesaplar
@@ -65,35 +102,45 @@ class _DailyMissionSheetState extends ConsumerState<DailyMissionSheet> {
   }
 
   /// ✈️ PREMIUM UÇAN AYRAÇ (📖) ANİMASYON MOTORU
-  void _showFlyingBookmarkAnimation(BuildContext context, Offset startOffset) {
+  void _showFlyingBookmarkAnimation(BuildContext context, _PendingAnimation pending) {
+    // Find target position using GlobalKey
+    final RenderBox? targetBox = WeeklyCollectionCard.progressTargetKey.currentContext?.findRenderObject() as RenderBox?;
+    
+    if (targetBox == null) {
+      // If target not found, just update count and move on
+      setState(() {
+        _visualWeeklyBookmarks = (_visualWeeklyBookmarks ?? 0) + pending.rewardAmount;
+        _isAnimating = false;
+      });
+      _processNextAnimation();
+      return;
+    }
+
+    final targetOffset = targetBox.localToGlobal(Offset(targetBox.size.width / 2, targetBox.size.height / 2));
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
 
     overlayEntry = OverlayEntry(
       builder: (context) {
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.0, end: 1.0),
-          duration: const Duration(milliseconds: 900),
-          curve: Curves.easeOutCubic,
-          onEnd: () => overlayEntry.remove(),
-          builder: (context, value, child) {
-            final currentY = startOffset.dy - (value * 140);
-            final currentX = startOffset.dx - (value * 30);
+        return _BookmarkFlightAnimation(
+          startOffset: pending.startOffset,
+          targetOffset: targetOffset,
+          onComplete: () {
+            if (mounted) {
+              setState(() {
+                _visualWeeklyBookmarks = (_visualWeeklyBookmarks ?? 0) + pending.rewardAmount;
+                _isAnimating = false;
+              });
 
-            return Positioned(
-              left: currentX,
-              top: currentY,
-              child: Opacity(
-                opacity: (1.0 - value).clamp(0.0, 1.0),
-                child: Transform.scale(
-                  scale: 1.0 + (value * 0.25),
-                  child: const Material(
-                    color: Colors.transparent,
-                    child: Text('📖', style: TextStyle(fontSize: 30)),
-                  ),
-                ),
-              ),
-            );
+              // Trigger pulse on the target card
+              final state = WeeklyCollectionCard.progressTargetKey.currentContext?.findAncestorStateOfType<WeeklyCollectionCardState>();
+              state?.pulse();
+              
+              overlayEntry.remove();
+              _processNextAnimation();
+            } else {
+              overlayEntry.remove();
+            }
           },
         );
       },
@@ -108,53 +155,61 @@ class _DailyMissionSheetState extends ConsumerState<DailyMissionSheet> {
 
     if (progressData.isClaimed) return;
 
+    // İlk asenkron işlem (Bekleme başlıyor...)
     final bool isSuccess = await notifier.claimMission(progressData.mission.id);
 
+    // 🔥 2. ADIM: Bekleme bitti! Alt satıra geçmeden önce bu sayfa hala ekranda açık mı kontrol et:
+    if (!mounted) return;
+
     if (isSuccess) {
-      _showFlyingBookmarkAnimation(context, startPosition);
+      // Visual feedback via flying animation
+      _enqueueAnimation(startPosition, progressData.mission.rewardBookmarks);
+
+      // İkinci asenkron işlem (Token ekleme süreci...)
       await ref.read(gameProvider.notifier).addTokens(progressData.mission.rewardTokens);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppColors.surfaceElevated,
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            duration: const Duration(seconds: 2),
-            content: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('🪙', style: TextStyle(fontSize: 15)),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    '+${progressData.mission.rewardTokens} Token',
-                    style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.bold, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      // 🔥 3. ADIM: İkinci bekleme de bitti! SnackBar göstermeden önce sayfa hala açık mı kontrol et:
+      if (!mounted) return;
+
+      // Artık widget'a ait context'i %100 güvenle kullanabiliriz, uyarı tamamen kaybolacak.
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.surfaceElevated,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          duration: const Duration(seconds: 2),
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('🪙', style: TextStyle(fontSize: 15)),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  '+${progressData.mission.rewardTokens} Token',
+                  style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.bold, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 16),
-                const Text('📖', style: TextStyle(fontSize: 15)),
-                const SizedBox(width: 4),
-                const Flexible(
-                  child: Text(
-                    '+1 Ayraç',
-                    style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              ),
+              const SizedBox(width: 16),
+              const Icon(Icons.menu_book_rounded, color: AppColors.primary, size: 18),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  '+${progressData.mission.rewardBookmarks} Ayraç',
+                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      }
+        ),
+      );
     }
   }
 
-  /// 🎁 🎯 YENİ: PREMIUM TIKLANABİLİR HAFTALIK SANDIK ÖDÜLÜ ALMA METODU
-  /// 🎁 🎯 PREMIUM TIKLANABİLİR HAFTALIK SANDIK ÖDÜLÜ ALMA METODU
+  /// 🎁 🎯 PREMIUMHAFTALIK SANDIK ÖDÜLÜ ALMA METODU
   Future<void> _onClaimChestReward(int chestValue) async {
     final notifier = ref.read(dailyMissionProvider.notifier);
 
@@ -169,7 +224,6 @@ class _DailyMissionSheetState extends ConsumerState<DailyMissionSheet> {
       chestName = 'Altın Sandık 🥇';
     }
 
-    // 🎯 DÜZELTME: Artık gerçek provider kontrolü çalışıyor!
     final bool isSuccess = await notifier.claimWeeklyChest(chestValue);
 
     if (isSuccess) {
@@ -184,10 +238,9 @@ class _DailyMissionSheetState extends ConsumerState<DailyMissionSheet> {
             backgroundColor: AppColors.surfaceElevated,
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             duration: const Duration(seconds: 3),
-            // 🎯 DÜZELTME: borderSide parametresini buradan siliyoruz, RoundedRectangleBorder'ın içine taşıyoruz:
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: AppColors.primary, width: 1), // Lüks altın sınır çizgisi buraya geldi
+              side: const BorderSide(color: AppColors.primary, width: 1),
             ),
             content: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -216,96 +269,202 @@ class _DailyMissionSheetState extends ConsumerState<DailyMissionSheet> {
   @override
   Widget build(BuildContext context) {
     final missionState = ref.watch(dailyMissionProvider);
+    _syncVisualBookmarks(missionState.weeklyBookmarks);
 
     if (missionState.isLoading) {
-      return const SizedBox(
+      return Container(
         height: 400,
-        child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Üst Sürükleme Çubuğu
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(2),
-            ),
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.98,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-
-          // Başlık ve Premium Sayaç Alanı (Taşma Korumalı)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
             children: [
-              Expanded(
-                child: Text(
-                  'Günlük Görevler',
-                  style: AppTypography.bodyLarge,
-                  overflow: TextOverflow.ellipsis,
+              // Üst Sürükleme Çubuğu
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceElevated,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _getRemainingTimeText(),
-                    style: AppTypography.labelSmall.copyWith(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+
+              Expanded(
+                child: Scrollbar(
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    children: [
+                      // Başlık ve Sayaç Alanı
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Günlük Görevler',
+                              style: AppTypography.bodyLarge,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceElevated,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _getRemainingTimeText(),
+                                style: AppTypography.labelSmall.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Haftalık İlerleme ve Sandıklar Kartı
+                      WeeklyCollectionCard(
+                        current: _visualWeeklyBookmarks ?? missionState.weeklyBookmarks,
+                        claimedChests: missionState.claimedChestValues,
+                        onClaimChest: (chestValue) => _onClaimChestReward(chestValue),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Günün Aktif 3 Görevi Listesi
+                      ...missionState.missions.map((progressData) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: DailyMissionCard(
+                              mission: progressData,
+                              onClaim: (offset) => _onClaimReward(progressData, offset),
+                            ),
+                          )),
+                      
+                      // Extra spacing to ensure last card is fully visible above system bar
+                      const SizedBox(height: 24),
+                      SizedBox(height: MediaQuery.paddingOf(context).bottom),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+        );
+      },
+    );
+  }
+}
 
-          // Haftalık İlerleme ve Sandıklar Kartı
-          WeeklyBookmarkCard(
-            current: missionState.weeklyBookmarks,
-            claimedChests: missionState.claimedChestValues, // 🎯 İŞTE BU YENİ VERİYİ KARTA PASLIYORUZ!
-            onClaimChest: (chestValue) => _onClaimChestReward(chestValue),
-          ),
-          const SizedBox(height: 20),
+class _PendingAnimation {
+  final Offset startOffset;
+  final int rewardAmount;
 
-          // Günün Aktif 3 Görevi Listesi
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: missionState.missions.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final progressData = missionState.missions[index];
+  _PendingAnimation({required this.startOffset, required this.rewardAmount});
+}
 
-                return DailyMissionCard(
-                  mission: progressData,
-                  onClaim: (offset) => _onClaimReward(progressData, offset),
-                );
-              },
+class _BookmarkFlightAnimation extends StatefulWidget {
+  final Offset startOffset;
+  final Offset targetOffset;
+  final VoidCallback onComplete;
+
+  const _BookmarkFlightAnimation({
+    required this.startOffset,
+    required this.targetOffset,
+    required this.onComplete,
+  });
+
+  @override
+  State<_BookmarkFlightAnimation> createState() => _BookmarkFlightAnimationState();
+}
+
+class _BookmarkFlightAnimationState extends State<_BookmarkFlightAnimation> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic);
+    _controller.forward().then((_) => widget.onComplete());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        final t = _animation.value;
+        
+        final p0 = widget.startOffset;
+        final p2 = widget.targetOffset;
+        
+        // Control point for quadratic Bezier (Arc-like path)
+        final p1 = Offset(
+          (p0.dx + p2.dx) / 2 + 50, 
+          (p0.dy + p2.dy) / 2 - 150, 
+        );
+
+        final x = (1 - t) * (1 - t) * p0.dx + 2 * (1 - t) * t * p1.dx + t * t * p2.dx;
+        final y = (1 - t) * (1 - t) * p0.dy + 2 * (1 - t) * t * p1.dy + t * t * p2.dy;
+        
+        final double opacity = t < 0.1 ? t * 10 : (t > 0.9 ? (1.0 - t) * 10 : 1.0);
+        final double scale = t < 0.2 ? 1.0 + t : (t > 0.8 ? 1.2 - (t - 0.8) : 1.2);
+
+        return Positioned(
+          left: x - 15,
+          top: y - 15,
+          child: Opacity(
+            opacity: opacity.clamp(0.0, 1.0),
+            child: Transform.scale(
+              scale: scale,
+              child: Transform.rotate(
+                angle: t * 0.4,
+                child: const Material(
+                  color: Colors.transparent,
+                  child: Icon(
+                    Icons.menu_book_rounded,
+                    color: AppColors.primary,
+                    size: 30,
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-        ],
-      ),
+        );
+      },
     );
   }
 }

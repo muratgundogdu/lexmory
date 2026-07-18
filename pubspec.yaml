@@ -2,7 +2,7 @@ name: lexmory
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0-rc.1+2
 
 environment:
   sdk: ^3.11.1
@@ -11,13 +11,14 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  flutter_riverpod: ^2.5.1
+  flutter_riverpod: ^3.3.2
   flutter_animate: ^4.5.0
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
   shared_preferences: ^2.2.3
   flutter_native_splash: ^2.4.4
-  google_mobile_ads: ^5.2.0
-  intl: ^0.19.0
+  google_mobile_ads: ^9.0.0
+  intl: ^0.20.3
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +55,20 @@ flutter:
     - lib/assets/library/room_14/
     - lib/assets/library/room_15/
     - lib/assets/cards/
+    - lib/assets/chests/
+    - lib/assets/cards/bilge_amca/
+    - lib/assets/cards/kutuphane_kedisi/
+    - lib/assets/cards/akademi_baykusu/
+    - lib/assets/cards/zaman_bekcisi/
+    - lib/assets/cards/gizemli_koleksiyoncu/
+    - lib/assets/cards/eski_kasif/
+    - lib/assets/cards/cilgin_simyaci/
+    - lib/assets/cards/usta_sanatci/
+    - lib/assets/cards/genc_mucit/
+    - lib/assets/cards/kraliyet_hazinesi/
+    - lib/assets/cards/gizemli_eserler/
+    - lib/assets/cards/sonsuz_bilgelik/
+    - lib/assets/audio/sfx/
 
 flutter_native_splash:
   color: "#0F0F10"

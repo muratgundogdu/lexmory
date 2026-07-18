@@ -13,6 +13,7 @@ import '../models/game_state.dart';
 // Yeni import'lar:
 import '../../missions/view/daily_mission_button.dart'; // DailyMissionButton'ın yeni yolu
 import '../../missions/view/daily_mission_sheet.dart'; // DailyMissionSheet'in yeni yolu
+import '../../tutorial/providers/tutorial_provider.dart';
 
 class GameHeader extends ConsumerStatefulWidget {
   final GameState game;
@@ -171,7 +172,7 @@ class _GameHeaderState extends ConsumerState<GameHeader> {
           padding: const EdgeInsets.only(right: 5.0),
           child: DailyMissionButton(
             hasPendingDailyMission: _hasPendingDailyMission,
-            onPressed: () {
+            onPressed: ref.watch(tutorialProvider).isNavigationLocked ? null : () {
               setState(() {
                 _hasPendingDailyMission = !_hasPendingDailyMission;
               });

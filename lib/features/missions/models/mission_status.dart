@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 enum MissionStatus { ongoing, claimable, claimed }
 enum ChestStatus { locked, claimable, claimed }

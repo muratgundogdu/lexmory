@@ -55,7 +55,23 @@ class JokerBar extends ConsumerWidget {
             icon: Icons.lightbulb_outline_rounded,
             label: "Harf Aç",
             cost: 80,
-            onTap: canUseHint ? () => notifier.useHint() : null,
+            inventoryCount: game.hintInventory,
+            onTap: canUseHint
+                ? () async {
+                    final bool wasFree = game.hintInventory > 0;
+                    await notifier.useHint();
+                    if (wasFree && context.mounted) {
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Ücretsiz Harf Aç kullanıldı'),
+                          duration: Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  }
+                : null,
           ),
           _buildDivider(),
           _JokerItem(
@@ -63,7 +79,23 @@ class JokerBar extends ConsumerWidget {
             icon: Icons.auto_fix_high_rounded,
             label: "Yanlış Sil",
             cost: 60,
-            onTap: canUseClear ? () => notifier.clearWrong() : null,
+            inventoryCount: game.removeWrongInventory,
+            onTap: canUseClear
+                ? () async {
+                    final bool wasFree = game.removeWrongInventory > 0;
+                    await notifier.clearWrong();
+                    if (wasFree && context.mounted) {
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Ücretsiz Yanlışı Sil kullanıldı'),
+                          duration: Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  }
+                : null,
           ),
           _buildDivider(),
           _JokerItem(
@@ -71,6 +103,7 @@ class JokerBar extends ConsumerWidget {
             icon: Icons.visibility_outlined,
             label: "Tekrar",
             cost: 40,
+            inventoryCount: 0,
             onTap: canUseReveal ? () => notifier.showAgain() : null,
           ),
         ],
@@ -91,6 +124,7 @@ class _JokerItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final int cost;
+  final int inventoryCount;
   final VoidCallback? onTap;
 
   const _JokerItem({
@@ -98,12 +132,14 @@ class _JokerItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.cost,
+    required this.inventoryCount,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final bool isEnabled = onTap != null;
+    final bool hasInventory = inventoryCount > 0;
 
     return GestureDetector(
       onTap: onTap,
@@ -113,16 +149,38 @@ class _JokerItem extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // İkon Alanı (Squirce/Rounded Corner Tasarımı)
-            Container(
-              padding: const EdgeInsets.all(AppDimens.s12),
-              decoration: BoxDecoration(
-                color: isEnabled ? AppColors.surfaceElevated : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
-                border: Border.all(
-                  color: isEnabled ? AppColors.primary.withValues(alpha: 0.3) : AppColors.border,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(AppDimens.s12),
+                  decoration: BoxDecoration(
+                    color: isEnabled ? AppColors.surfaceElevated : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
+                    border: Border.all(
+                      color: isEnabled
+                          ? (hasInventory ? AppColors.primary : AppColors.primary.withValues(alpha: 0.3))
+                          : AppColors.border,
+                      width: hasInventory ? 2 : 1,
+                    ),
+                  ),
+                  child: Icon(icon, color: isEnabled ? AppColors.primary : AppColors.textMuted, size: 24),
                 ),
-              ),
-              child: Icon(icon, color: isEnabled ? AppColors.primary : AppColors.textMuted, size: 24),
+                if (isEnabled && hasInventory)
+                  Positioned(
+                    top: -5,
+                    right: -5,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.card_giftcard, size: 10, color: Colors.black),
+                    ).animate(onPlay: (c) => c.repeat(reverse: true))
+                     .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 800.ms),
+                  ),
+              ],
             ),
             const SizedBox(height: AppDimens.s8),
             // Metin ve Token Etiketi
@@ -134,21 +192,31 @@ class _JokerItem extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text("🪙", style: TextStyle(fontSize: 10)),
-                const SizedBox(width: 4),
-                Text(
-                  cost.toString(),
-                  style: AppTypography.labelSmall.copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary,
-                  ),
+            if (hasInventory)
+              Text(
+                "Ücretsiz ×$inventoryCount",
+                style: AppTypography.labelSmall.copyWith(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.primary,
                 ),
-              ],
-            ),
+              )
+            else
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("🪙", style: TextStyle(fontSize: 10)),
+                  const SizedBox(width: 4),
+                  Text(
+                    cost.toString(),
+                    style: AppTypography.labelSmall.copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

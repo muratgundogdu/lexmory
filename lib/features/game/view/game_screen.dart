@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_dimens.dart';
 import '../../../core/app_typography.dart';
+import '../../../core/debug_config.dart';
 
 // Tutorial
 import '../../tutorial/models/tutorial_state.dart' hide TutorialKeys;
@@ -35,6 +36,21 @@ class GameScreen extends ConsumerStatefulWidget {
 }
 
 class _GameScreenState extends ConsumerState<GameScreen> {
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('GAME_SCREEN: initState');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(tutorialProvider.notifier).startJokerOnboarding();
+    });
+  }
+
+  @override
+  void dispose() {
+    debugPrint('GAME_SCREEN: dispose');
+    super.dispose();
+  }
+
   // Kelime harf kutuları için yerel key listesi (Kelime uzunluğuna göre dinamik)
   final List<GlobalKey> _boxKeys = List.generate(12, (_) => GlobalKey());
 
@@ -43,7 +59,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tutorial = ref.watch(tutorialProvider);
     final game = ref.watch(gameProvider);
 
     // Veri kontrolü
@@ -60,11 +75,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       backgroundColor: AppColors.background,
       body: Container(
         decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.topCenter,
-            radius: 1.5,
-            colors: [AppColors.surface, AppColors.background],
-          ),
+          color: AppColors.background,
         ),
         child: Stack(
           children: [
@@ -198,6 +209,42 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   /// BULDUM Pill Button
   Widget _buildStartButton(GameState game) {
+    final Widget buttonContent = Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.4),
+            blurRadius: 15,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [ Text(
+          "BULDUM!",
+          style: AppTypography.bodyLarge.copyWith(
+            color: AppColors.background,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+            letterSpacing: 1.5,
+          ),
+        ),
+       ],
+      ),
+    );
+
+    final animate = buttonContent.animate(onPlay: (c) => c.repeat(reverse: true))
+        .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 1000.ms, curve: Curves.easeInOut);
+
     return Center(
       child: GestureDetector(
         key: TutorialKeys.startButtonKey,
@@ -210,42 +257,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ref.read(tutorialProvider.notifier).nextStep();
           }
         },
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            gradient: const LinearGradient(
-              colors: [AppColors.primary, AppColors.primaryLight],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.4),
-                blurRadius: 15,
-                offset: const Offset(0, 4),
-              )
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min, // 3. KRİTİK: Sadece metin kadar yer kaplar
-            children: [ Text(
-              "BULDUM!",
-              style: AppTypography.bodyLarge.copyWith(
-                color: AppColors.background,
-                fontWeight: FontWeight.w900,
-                fontSize: 14,
-                letterSpacing: 1.5,
-              ),
-            ),
-           ],
-          ),
-        ),
+        child: DebugConfig.enableShimmers
+            ? animate.shimmer(delay: 3.seconds, duration: 1500.ms, color: Colors.white30)
+            : animate,
       ),
-    )
-        .animate(onPlay: (c) => c.repeat(reverse: true))
-        .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 1000.ms, curve: Curves.easeInOut)
-        .shimmer(delay: 3.seconds, duration: 1500.ms, color: Colors.white30);
+    );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_dimens.dart';
 import '../../../core/app_typography.dart';
+import '../../../core/debug_config.dart';
 import '../models/game_state.dart';
 
 class WordRevealArea extends ConsumerWidget {
@@ -88,7 +89,7 @@ class WordRevealArea extends ConsumerWidget {
   }
 
   Widget _buildLetter(String char, double fontSize, bool isJustFound) {
-    return Text(
+    final Widget letter = Text(
       char,
       style: AppTypography.displayLarge.copyWith(
         fontSize: fontSize,
@@ -98,7 +99,9 @@ class WordRevealArea extends ConsumerWidget {
             ? [const Shadow(color: AppColors.primary, blurRadius: 15)]
             : null,
       ),
-    )
+    );
+
+    final animate = letter
         .animate(target: 1)
         .fadeIn(duration: isJustFound ? 150.ms : 0.ms)
         .scale(
@@ -106,11 +109,15 @@ class WordRevealArea extends ConsumerWidget {
       end: const Offset(1.0, 1.0),
       duration: isJustFound ? 200.ms : 0.ms,
       curve: Curves.easeOutBack,
-    )
-        .shimmer(
-      duration: isJustFound ? 400.ms : 0.ms,
-      color: AppColors.primaryLight.withValues(alpha: 0.3),
     );
+
+    if (DebugConfig.enableShimmers && isJustFound) {
+      return animate.shimmer(
+        duration: 400.ms,
+        color: AppColors.primaryLight.withValues(alpha: 0.3),
+      );
+    }
+    return animate;
   }
 
   Widget _buildEmptyPlaceholder() {

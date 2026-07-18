@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_typography.dart';
 import '../models/tutorial_state.dart';
+import '../providers/tutorial_provider.dart';
 
-class TutorialOverlay extends StatefulWidget {
+class TutorialOverlay extends ConsumerStatefulWidget {
   final GlobalKey? targetKey;
   final String text;
   final String buttonText;
@@ -26,29 +28,83 @@ class TutorialOverlay extends StatefulWidget {
   });
 
   @override
-  State<TutorialOverlay> createState() => _TutorialOverlayState();
+  ConsumerState<TutorialOverlay> createState() => _TutorialOverlayState();
 }
 
-class _TutorialOverlayState extends State<TutorialOverlay> {
+class _TutorialOverlayState extends ConsumerState<TutorialOverlay> {
   Rect? _spotlightRect;
   Timer? _timer;
+  bool _didNotifyMounted = false;
+  int _retryCount = 0;
+  static const int _maxRetries = 10;
 
   @override
   void initState() {
     super.initState();
-    _updateRect();
+    _scheduleRectUpdate();
     // 100ms'de bir kontrol ederek çok daha akıcı bir takip sağlıyoruz
-    _timer = Timer.periodic(100.ms, (_) => _updateRect());
+    _timer = Timer.periodic(100.ms, (_) {
+      if (mounted) _updateRect();
+    });
+  }
+
+  @override
+  void didUpdateWidget(TutorialOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentStep != widget.currentStep || oldWidget.targetKey != widget.targetKey) {
+      _didNotifyMounted = false;
+      _retryCount = 0;
+      _scheduleRectUpdate();
+    }
+  }
+
+  void _scheduleRectUpdate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _updateRect();
+    });
   }
 
   void _updateRect() {
     if (widget.targetKey == null) return;
-    final RenderBox? box = widget.targetKey!.currentContext?.findRenderObject() as RenderBox?;
-    if (box != null && box.hasSize) {
-      final newRect = box.localToGlobal(Offset.zero) & box.size;
+    
+    final context = widget.targetKey!.currentContext;
+    if (context == null || !context.mounted) {
+      _handleRetry();
+      return;
+    }
+
+    final renderObject = context.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize && renderObject.attached) {
+      final newRect = renderObject.localToGlobal(Offset.zero) & renderObject.size;
+      
       if (newRect != _spotlightRect) {
-        if (mounted) setState(() => _spotlightRect = newRect);
+        if (mounted) {
+          setState(() => _spotlightRect = newRect);
+        }
       }
+
+      if (!_didNotifyMounted && widget.currentStep != null) {
+        _didNotifyMounted = true;
+        _notifyMounted();
+      }
+    } else {
+      _handleRetry();
+    }
+  }
+
+  void _notifyMounted() {
+    // Notify provider after frame to avoid build-phase mutation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(tutorialProvider.notifier).onSpotlightMounted(widget.currentStep!);
+      }
+    });
+  }
+
+  void _handleRetry() {
+    if (_retryCount < _maxRetries) {
+      _retryCount++;
+      _scheduleRectUpdate();
     }
   }
 
@@ -61,41 +117,23 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-
-    // Eğer hedef yoksa (geçiş anı) ekranın dışında küçük bir nokta oluşturur
     final rect = _spotlightRect ?? Rect.fromLTWH(size.width / 2, size.height / 2, 0, 0);
 
-    return Stack(
-      children: [
-        // 1. GERÇEK SPOTLIGHT KATMANI (Tıklamayı engellemez)
-        IgnorePointer(
-          ignoring: true, // Alt katmandaki butonlara basmayı engellemez
-          child: TweenAnimationBuilder<Rect?>(
-            duration: 600.ms, // Kayma efekti süresi
-            curve: Curves.easeOutQuart,
-            tween: RectTween(begin: rect, end: rect),
-            builder: (context, animRect, _) {
-              return CustomPaint(
-                size: size,
-                painter: SpotlightPainter(
-                  rect: animRect ?? rect,
-                  shadowColor: Colors.black.withValues(alpha: 0.6), // %60 Karartma
-                ),
-              );
-            },
-          ),
-        ),
+    return TweenAnimationBuilder<Rect?>(
+      duration: 600.ms,
+      curve: Curves.easeOutQuart,
+      tween: RectTween(begin: rect, end: rect),
+      builder: (context, animRect, _) {
+        final r = animRect ?? rect;
+        return Stack(
+          children: [
+            // 1. BARRIER WITH HOLE (Spotlight effect + Interaction control)
+            _buildSpotlightBarrier(size, r),
 
-        // Hedef Alan Çerçevesi (Görsel Yardımcı - Tıklamayı Engellemez)
-        IgnorePointer(
-          ignoring: true,
-          child: TweenAnimationBuilder<Rect?>(
-            duration: 600.ms,
-            curve: Curves.easeOutQuart,
-            tween: RectTween(begin: rect, end: rect),
-            builder: (context, animRect, _) {
-              final r = animRect ?? rect;
-              return Stack(
+            // Hedef Alan Çerçevesi (Görsel Yardımcı - Tıklamayı Engellemez)
+            IgnorePointer(
+              ignoring: true,
+              child: Stack(
                 children: [
                   Positioned.fromRect(
                     rect: r.inflate(4),
@@ -107,24 +145,78 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
                     ),
                   ),
                 ],
-              );
-            },
+              ),
+            ),
+
+            // 2. BİLGİ KARTI (Tıklanabilir)
+            _buildInfoCard(context, r),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSpotlightBarrier(Size size, Rect rect) {
+    final isLocked = ref.watch(tutorialProvider).isNavigationLocked;
+    
+    return Stack(
+      children: [
+        if (isLocked) ...[
+          // Top
+          Positioned(
+            top: 0, left: 0, right: 0,
+            height: rect.top.clamp(0, size.height),
+            child: _buildBarrierPart(),
+          ),
+          // Bottom
+          Positioned(
+            top: rect.bottom.clamp(0, size.height), left: 0, right: 0, bottom: 0,
+            child: _buildBarrierPart(),
+          ),
+          // Left
+          Positioned(
+            top: rect.top.clamp(0, size.height), 
+            height: (rect.bottom - rect.top).clamp(0, size.height),
+            left: 0, width: rect.left.clamp(0, size.width),
+            child: _buildBarrierPart(),
+          ),
+          // Right
+          Positioned(
+            top: rect.top.clamp(0, size.height),
+            height: (rect.bottom - rect.top).clamp(0, size.height),
+            left: rect.right.clamp(0, size.width), right: 0,
+            child: _buildBarrierPart(),
+          ),
+        ],
+        
+        IgnorePointer(
+          ignoring: true,
+          child: CustomPaint(
+            size: size,
+            painter: SpotlightPainter(
+              rect: rect,
+              shadowColor: Colors.black.withValues(alpha: 0.6),
+            ),
           ),
         ),
-
-        // 2. BİLGİ KARTI (Tıklanabilir)
-        _buildInfoCard(context),
       ],
     );
   }
 
-  Widget _buildInfoCard(BuildContext context) {
+  Widget _buildBarrierPart() {
+    return GestureDetector(
+      onTap: () {},
+      behavior: HitTestBehavior.opaque,
+      child: Container(color: Colors.transparent),
+    );
+  }
+
+  Widget _buildInfoCard(BuildContext context, Rect spotlightRect) {
     final screenHeight = MediaQuery.of(context).size.height;
     final viewPadding = MediaQuery.of(context).padding;
 
     // Kartın konumu: Spotlight aşağıdaysa kart yukarı, yukarıdaysa aşağı
-    final bool isSpotlightAtBottom = _spotlightRect != null &&
-        _spotlightRect!.center.dy > (screenHeight * 0.45);
+    final bool isSpotlightAtBottom = spotlightRect.center.dy > (screenHeight * 0.45);
 
     final bool isFixedStep = [
       TutorialStep.category,

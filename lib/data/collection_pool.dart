@@ -1,627 +1,100 @@
 import '../features/library/models/collection_card.dart';
+import '../features/library/models/card_rarity.dart';
 
 final List<CollectionCard> collectionPool = [
-  // ==========================================
-  // SET 1: BİLGE AMCA (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'ba_01',
-      name: 'Bilge Şapkası',
-      description: 'Yılların birikimiyle ağırlaşmış kadim bir şapka.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/bilge_sapkasi.png',
-      setName: 'Bilge Amca'
-  ),
-  CollectionCard(
-      id: 'ba_02',
-      name: 'Bilge Bastonu',
-      description: 'Yürürken her adımda yere bilgelik fısıldayan baston.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/bilge_bastonu.png',
-      setName: 'Bilge Amca'
-  ),
-  CollectionCard(
-      id: 'ba_03',
-      name: 'Bilge Gözlüğü',
-      description: 'Gözden kaçan en küçük satır arası detayları bile büyütür.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/bilge_gozlugu.png',
-      setName: 'Bilge Amca'
-  ),
-  CollectionCard(
-      id: 'ba_04',
-      name: 'Bilge Parşömeni',
-      description: 'Üzerine henüz yazılmamış gelecek sırlarını barındırır.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/bilge_parsemeni.png',
-      setName: 'Bilge Amca'
-  ),
-  CollectionCard(
-      id: 'ba_05',
-      name: 'Bilge Tüy Kalemi',
-      description: 'Kendi mürekkebini kendi üreten efsanevi yazı aracı.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/bilge_tuy_kalemi.png',
-      setName: 'Bilge Amca'
-  ),
-  CollectionCard(
-      id: 'ba_06',
-      name: 'Bilgelik Kitabı',
-      description: 'Kütüphanenin en korunaklı rafında saklanan başyapıt.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/bilgelik_kitabi.png',
-      setName: 'Bilge Amca'
-  ),
+  // SET 1: Bilge Amca (set_01)
+  const CollectionCard(id: 'ba_01', name: 'Bilge Şapkası', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/bilge_amca/bilge_sapkasi.webp', collectionId: 'set_01', setName: 'Bilge Amca', stars: 1),
+  const CollectionCard(id: 'ba_02', name: 'Bilge Bastonu', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/bilge_amca/bilge_bastonu.webp', collectionId: 'set_01', setName: 'Bilge Amca', stars: 1),
+  const CollectionCard(id: 'ba_03', name: 'Bilge Gözlüğü', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/bilge_amca/bilge_gozlugu.webp', collectionId: 'set_01', setName: 'Bilge Amca', stars: 1),
+  const CollectionCard(id: 'ba_04', name: 'Bilge Parşömeni', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/bilge_amca/bilge_parsemeni.webp', collectionId: 'set_01', setName: 'Bilge Amca', stars: 2),
+  const CollectionCard(id: 'ba_05', name: 'Bilge Tüy Kalemi', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/bilge_amca/bilge_tuy_kalemi.webp', collectionId: 'set_01', setName: 'Bilge Amca', stars: 2),
+  const CollectionCard(id: 'ba_06', name: 'Bilgelik Kitabı', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/bilge_amca/bilgelik_kitabi.webp', collectionId: 'set_01', setName: 'Bilge Amca', stars: 3),
 
-  // ==========================================
-  // SET 2: KÜTÜPHANE KEDİSİ (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'kk_01',
-      name: 'Mama Kabı',
-      description: 'Asla boş kalmaması gereken gizemli bir kap.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/mama_kabi.png',
-      setName: 'Kütüphane Kedisi'
-  ),
-  CollectionCard(
-      id: 'kk_02',
-      name: 'Yün Yumak',
-      description: 'Kütüphane rafları arasında yuvarlanan renkli oyuncak.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/yun_yumak.png',
-      setName: 'Kütüphane Kedisi'
-  ),
-  CollectionCard(
-      id: 'kk_03',
-      name: 'Oyuncak Fare',
-      description: 'Kedinin en sevdiği sahte avı.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/oyuncak_fare.png',
-      setName: 'Kütüphane Kedisi'
-  ),
-  CollectionCard(
-      id: 'kk_04',
-      name: 'Kedi Yastığı',
-      description: 'Üzerinde en derin uykuların çekildiği yumuşak minder.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/kedi_yastigi.png',
-      setName: 'Kütüphane Kedisi'
-  ),
-  CollectionCard(
-      id: 'kk_05',
-      name: 'Çanlı Tasma',
-      description: 'Kütüphanede sessizliği hafifçe bozan gümüş çıngırak.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/canli_tasma.png',
-      setName: 'Kütüphane Kedisi'
-  ),
-  CollectionCard(
-      id: 'kk_06',
-      name: 'Altın Tasma',
-      description: 'Sadece kütüphanenin gerçek sahibine layık asil bir tasma.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/altin_tasma.png',
-      setName: 'Kütüphane Kedisi'
-  ),
+  // SET 2: Kütüphane Kedisi (set_02)
+  const CollectionCard(id: 'kk_01', name: 'Mama Kabı', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/kutuphane_kedisi/mama_kabi.webp', collectionId: 'set_02', setName: 'Kütüphane Kedisi', stars: 1),
+  const CollectionCard(id: 'kk_02', name: 'Yün Yumak', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/kutuphane_kedisi/yun_yumak.webp', collectionId: 'set_02', setName: 'Kütüphane Kedisi', stars: 1),
+  const CollectionCard(id: 'kk_03', name: 'Oyuncak Fare', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/kutuphane_kedisi/oyuncak_fare.webp', collectionId: 'set_02', setName: 'Kütüphane Kedisi', stars: 1),
+  const CollectionCard(id: 'kk_04', name: 'Kedi Yastığı', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/kutuphane_kedisi/kedi_yastigi.webp', collectionId: 'set_02', setName: 'Kütüphane Kedisi', stars: 2),
+  const CollectionCard(id: 'kk_05', name: 'Çanlı Tasma', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/kutuphane_kedisi/canli_tasma.webp', collectionId: 'set_02', setName: 'Kütüphane Kedisi', stars: 2),
+  const CollectionCard(id: 'kk_06', name: 'Altın Tasma', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/kutuphane_kedisi/altin_tasma.webp', collectionId: 'set_02', setName: 'Kütüphane Kedisi', stars: 3),
 
-  // ==========================================
-  // SET 3: AKADEMİ BAYKUŞU (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'ab_01',
-      name: 'Baykuş Tüyü',
-      description: 'Gecenin karanlığında havada süzülen hafif bir tüy.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/baykus_tuyu.png',
-      setName: 'Akademi Baykuşu'
-  ),
-  CollectionCard(
-      id: 'ab_02',
-      name: 'Mektup Tomarı',
-      description: 'Uzak diyarlardan önemli haberler getiren rulo.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/mektup_tomari.png',
-      setName: 'Akademi Baykuşu'
-  ),
-  CollectionCard(
-      id: 'ab_03',
-      name: 'Gece Lambası',
-      description: 'Gece çalışan akademisyenlerin sadık dostu.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/gece_lambasi.png',
-      setName: 'Akademi Baykuşu'
-  ),
-  CollectionCard(
-      id: 'ab_04',
-      name: 'Gümüş Pençe',
-      description: 'Bilgiyi sıkıca kavrayan metalik bir pençe motifi.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/gumus_pence.png',
-      setName: 'Akademi Baykuşu'
-  ),
-  CollectionCard(
-      id: 'ab_05',
-      name: 'Akademi Rozeti',
-      description: 'Başarıyla tamamlanan sınavların onurlu nişanı.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/akademi_rozeti.png',
-      setName: 'Akademi Baykuşu'
-  ),
-  CollectionCard(
-      id: 'ab_06',
-      name: 'Bilgelik Madalyası',
-      description: 'Sadece en yüksek skora ulaşan dehalara verilir.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/bilgelik_madalyasi.png',
-      setName: 'Akademi Baykuşu'
-  ),
+  // SET 3: Akademi Baykuşu (set_03)
+  const CollectionCard(id: 'ab_01', name: 'Baykuş Tüyü', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/akademi_baykusu/baykus_tuyu.webp', collectionId: 'set_03', setName: 'Akademi Baykuşu', stars: 1),
+  const CollectionCard(id: 'ab_02', name: 'Mektup Tomarı', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/akademi_baykusu/mektup_tomari.webp', collectionId: 'set_03', setName: 'Akademi Baykuşu', stars: 1),
+  const CollectionCard(id: 'ab_03', name: 'Gece Lambası', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/akademi_baykusu/gece_lambasi.webp', collectionId: 'set_03', setName: 'Akademi Baykuşu', stars: 1),
+  const CollectionCard(id: 'ab_04', name: 'Gümüş Pençe', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/akademi_baykusu/gumus_pence.webp', collectionId: 'set_03', setName: 'Akademi Baykuşu', stars: 2),
+  const CollectionCard(id: 'ab_05', name: 'Akademi Rozeti', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/akademi_baykusu/akademi_rozeti.webp', collectionId: 'set_03', setName: 'Akademi Baykuşu', stars: 2),
+  const CollectionCard(id: 'ab_06', name: 'Bilgelik Madalyası', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/akademi_baykusu/bilgelik_madalyasi.webp', collectionId: 'set_03', setName: 'Akademi Baykuşu', stars: 3),
 
-  // ==========================================
-  // SET 4: ZAMAN BEKÇİSİ (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'zb_01',
-      name: 'Saat Anahtarı',
-      description: 'Zamanı ileri sarmak için kullanılan minik mekanik anahtar.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/saat_anahtari.png',
-      setName: 'Zaman Bekçisi'
-  ),
-  CollectionCard(
-      id: 'zb_02',
-      name: 'Saat Zinciri',
-      description: 'Köstekli saatleri koruyan sağlam metal örgü.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/saat_zinciri.png',
-      setName: 'Zaman Bekçisi'
-  ),
-  CollectionCard(
-      id: 'zb_03',
-      name: 'Bronz Saat',
-      description: 'Tık tık sesleriyle kütüphane ritmini tutan eski saat.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/bronz_saat.png',
-      setName: 'Zaman Bekçisi'
-  ),
-  CollectionCard(
-      id: 'zb_04',
-      name: 'Cep Saati',
-      description: 'Cepte taşınan, altın kaplama hassas zaman ölçer.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/cep_saati.png',
-      setName: 'Zaman Bekçisi'
-  ),
-  CollectionCard(
-      id: 'zb_05',
-      name: 'Kum Saati',
-      description: 'Akan kumların gizemiyle büyüleyen kadim zaman aracı.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/kum_saati.png',
-      setName: 'Zaman Bekçisi'
-  ),
-  CollectionCard(
-      id: 'zb_06',
-      name: 'Sonsuz Saat',
-      description: 'Zamanı tamamen durdurma gücüne sahip relik.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/sonsuz_saat.png',
-      setName: 'Zaman Bekçisi'
-  ),
+  // SET 4: Zaman Bekçisi (set_04)
+  const CollectionCard(id: 'zb_01', name: 'Saat Anahtarı', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/zaman_bekcisi/saat_anahtari.webp', collectionId: 'set_04', setName: 'Zaman Bekçisi', stars: 1),
+  const CollectionCard(id: 'zb_02', name: 'Saat Zinciri', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/zaman_bekcisi/saat_zinciri.webp', collectionId: 'set_04', setName: 'Zaman Bekçisi', stars: 1),
+  const CollectionCard(id: 'zb_03', name: 'Bronz Saat', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/zaman_bekcisi/bronz_saat.webp', collectionId: 'set_04', setName: 'Zaman Bekçisi', stars: 1),
+  const CollectionCard(id: 'zb_04', name: 'Cep Saati', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/zaman_bekcisi/cep_saati.webp', collectionId: 'set_04', setName: 'Zaman Bekçisi', stars: 2),
+  const CollectionCard(id: 'zb_05', name: 'Kum Saati', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/zaman_bekcisi/kum_saati.webp', collectionId: 'set_04', setName: 'Zaman Bekçisi', stars: 2),
+  const CollectionCard(id: 'zb_06', name: 'Sonsuz Saat', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/zaman_bekcisi/sonsuz_saat.webp', collectionId: 'set_04', setName: 'Zaman Bekçisi', stars: 3),
 
-  // ==========================================
-  // SET 5: GİZEMLİ KOLEKSİYONCU (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'gk_01',
-      name: 'Monokl',
-      description: 'Tek gözle antika detayları inceleme merceği.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/monokl.png',
-      setName: 'Gizemli Koleksiyoncu'
-  ),
-  CollectionCard(
-      id: 'gk_02',
-      name: 'Deri Eldiven',
-      description: 'Eserlere zarar vermeden dokunmayı sağlayan şık eldiven.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/deri_eldiven.png',
-      setName: 'Gizemli Koleksiyoncu'
-  ),
-  CollectionCard(
-      id: 'gk_03',
-      name: 'Silindir Şapka',
-      description: 'Koleksiyoncunun asil ve gizemli tarzını tamamlayan şapka.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/silindir_sapka.png',
-      setName: 'Gizemli Koleksiyoncu'
-  ),
-  CollectionCard(
-      id: 'gk_04',
-      name: 'Baston',
-      description: 'İçinde gizli bir harita bölmesi barındıran şık baston.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/baston.png',
-      setName: 'Gizemli Koleksiyoncu'
-  ),
-  CollectionCard(
-      id: 'gk_05',
-      name: 'Gizli Günlük',
-      description: 'Nadir bulunan tüm parçaların lokasyon şifreleri.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/gizli_gunluk.png',
-      setName: 'Gizemli Koleksiyoncu'
-  ),
-  CollectionCard(
-      id: 'gk_06',
-      name: 'Gizem Kutusu',
-      description: 'Açılması için özel bir bulmacanın çözülmesi gereken kutu.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/gizem_kutusu.png',
-      setName: 'Gizemli Koleksiyoncu'
-  ),
+  // SET 5: Gizemli Koleksiyoncu (set_05)
+  const CollectionCard(id: 'gk_01', name: 'Monokl', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/gizemli_koleksiyoncu/monokl.webp', collectionId: 'set_05', setName: 'Gizemli Koleksiyoncu', stars: 1),
+  const CollectionCard(id: 'gk_02', name: 'Deri Eldiven', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/gizemli_koleksiyoncu/deri_eldiven.webp', collectionId: 'set_05', setName: 'Gizemli Koleksiyoncu', stars: 1),
+  const CollectionCard(id: 'gk_03', name: 'Silindir Şapka', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/gizemli_koleksiyoncu/silindir_sapka.webp', collectionId: 'set_05', setName: 'Gizemli Koleksiyoncu', stars: 1),
+  const CollectionCard(id: 'gk_04', name: 'Baston', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/gizemli_koleksiyoncu/baston.webp', collectionId: 'set_05', setName: 'Gizemli Koleksiyoncu', stars: 2),
+  const CollectionCard(id: 'gk_05', name: 'Gizli Günlük', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/gizemli_koleksiyoncu/gizli_gunluk.webp', collectionId: 'set_05', setName: 'Gizemli Koleksiyoncu', stars: 2),
+  const CollectionCard(id: 'gk_06', name: 'Gizem Kutusu', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/gizemli_koleksiyoncu/gizem_kutusu.webp', collectionId: 'set_05', setName: 'Gizemli Koleksiyoncu', stars: 3),
 
-  // ==========================================
-  // SET 6: ESKİ KAŞİF (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'ek_01',
-      name: 'Pusula',
-      description: 'Kayıp kütüphanelerin yönünü asla şaşırmadan gösterir.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/pusula.png',
-      setName: 'Eski Kaşif'
-  ),
-  CollectionCard(
-      id: 'ek_02',
-      name: 'Harita',
-      description: 'Üzerinde tehlikeli geçitlerin işaretlendiği eski deri parşömen.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/harita.png',
-      setName: 'Eski Kaşif'
-  ),
-  CollectionCard(
-      id: 'ek_03',
-      name: 'Dürbün',
-      description: 'Uzak ufuklardaki gizli adaları ve tapınakları yakınlaştırır.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/durbun.png',
-      setName: 'Eski Kaşif'
-  ),
-  CollectionCard(
-      id: 'ek_04',
-      name: 'Seyir Defteri',
-      description: 'Gidilen tehlikeli yolların gün gün not edildiği defter.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/seyir_defteri.png',
-      setName: 'Eski Kaşif'
-  ),
-  CollectionCard(
-      id: 'ek_05',
-      name: 'Kaptan Şapkası',
-      description: 'Fırtınalı denizlerde dalgalara meydan okumuş kaşif şapkası.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/kaptan_sapkasi.png',
-      setName: 'Eski Kaşif'
-  ),
-  CollectionCard(
-      id: 'ek_06',
-      name: 'Hazine Sandığı',
-      description: 'İçi parıldayan kadim madeni paralarla dolu kilitli sandık.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/hazine_sandigi.png',
-      setName: 'Eski Kaşif'
-  ),
+  // SET 6: Eski Kaşif (set_06)
+  const CollectionCard(id: 'ek_01', name: 'Pusula', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/eski_kasif/pusula.webp', collectionId: 'set_06', setName: 'Eski Kaşif', stars: 1),
+  const CollectionCard(id: 'ek_02', name: 'Harita', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/eski_kasif/harita.webp', collectionId: 'set_06', setName: 'Eski Kaşif', stars: 1),
+  const CollectionCard(id: 'ek_03', name: 'Dürbün', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/eski_kasif/durbun.webp', collectionId: 'set_06', setName: 'Eski Kaşif', stars: 1),
+  const CollectionCard(id: 'ek_04', name: 'Seyir Defteri', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/eski_kasif/seyir_defteri.webp', collectionId: 'set_06', setName: 'Eski Kaşif', stars: 2),
+  const CollectionCard(id: 'ek_05', name: 'Kaptan Şapkası', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/eski_kasif/kaptan_sapkasi.webp', collectionId: 'set_06', setName: 'Eski Kaşif', stars: 2),
+  const CollectionCard(id: 'ek_06', name: 'Hazine Sandığı', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/eski_kasif/hazine_sandigi.webp', collectionId: 'set_06', setName: 'Eski Kaşif', stars: 3),
 
-  // ==========================================
-  // SET 7: ÇILGIN SİMYACI (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'cs_01',
-      name: 'Deney Tüpü',
-      description: 'İçinde yeşil fosforlu sıvıların köpürdüğü cam tüp.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/deney_tupu.png',
-      setName: 'Çlgın Simyacı'
-  ),
-  CollectionCard(
-      id: 'cs_02',
-      name: 'Simya Kaşığı',
-      description: 'Toz elementleri hassas ölçülerle karıştırma kaşığı.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/simya_kasigi.png',
-      setName: 'Çlgın Simyacı'
-  ),
-  CollectionCard(
-      id: 'cs_03',
-      name: 'İksir Şişesi',
-      description: 'Gece karanlığında hafifçe parıldayan mistik bir iksir.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/iksir_sisesi.png',
-      setName: 'Çlgın Simyacı'
-  ),
-  CollectionCard(
-      id: 'cs_04',
-      name: 'Kristal Parçası',
-      description: 'Enerji dalgaları yayan saf bir element kristali.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/kristal_parcasi.png',
-      setName: 'Çlgın Simyacı'
-  ),
-  CollectionCard(
-      id: 'cs_05',
-      name: 'Simya Lambası',
-      description: 'Normal ateşle değil, büyü enerjisiyle yanan lamba.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/simya_lambasi.png',
-      setName: 'Çlgın Simyacı'
-  ),
-  CollectionCard(
-      id: 'cs_06',
-      name: 'Altın İksir',
-      description: 'Değersiz metalleri altına dönüştürme formülünün sıvısı.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/altin_iksir.png',
-      setName: 'Çlgın Simyacı'
-  ),
+  // SET 7: Çılgın Simyacı (set_07)
+  const CollectionCard(id: 'cs_01', name: 'Deney Tüpü', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/cilgin_simyaci/deney_tupu.webp', collectionId: 'set_07', setName: 'Çılgın Simyacı', stars: 1),
+  const CollectionCard(id: 'cs_02', name: 'Simya Kaşığı', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/cilgin_simyaci/simya_kasigi.webp', collectionId: 'set_07', setName: 'Çılgın Simyacı', stars: 1),
+  const CollectionCard(id: 'cs_03', name: 'İksir Şişesi', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/cilgin_simyaci/iksir_sisesi.webp', collectionId: 'set_07', setName: 'Çılgın Simyacı', stars: 1),
+  const CollectionCard(id: 'cs_04', name: 'Kristal Parçası', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/cilgin_simyaci/kristal_parcasi.webp', collectionId: 'set_07', setName: 'Çılgın Simyacı', stars: 2),
+  const CollectionCard(id: 'cs_05', name: 'Simya Lambası', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/cilgin_simyaci/simya_lambasi.webp', collectionId: 'set_07', setName: 'Çılgın Simyacı', stars: 2),
+  const CollectionCard(id: 'cs_06', name: 'Altın İksir', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/cilgin_simyaci/altin_iksir.webp', collectionId: 'set_07', setName: 'Çılgın Simyacı', stars: 3),
 
-  // ==========================================
-  // SET 8: USTA SANATÇI (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'us_01',
-      name: 'Fırça',
-      description: 'Kıldan ucuyla tuvale hayat üfleyen narin fırça.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/firca.png',
-      setName: 'Usta Sanatçı'
-  ),
-  CollectionCard(
-      id: 'us_02',
-      name: 'Boya Paleti',
-      description: 'Tüm ana ve ara renklerin ahenkle dizildiği ahşap palet.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/boya_paleti.png',
-      setName: 'Usta Sanatçı'
-  ),
-  CollectionCard(
-      id: 'us_03',
-      name: 'Şövale',
-      description: 'Geleceğin başyapıtlarını üzerinde taşıyan güçlü stand.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/sovale.png',
-      setName: 'Usta Sanatçı'
-  ),
-  CollectionCard(
-      id: 'us_04',
-      name: 'Heykel Taslağı',
-      description: 'Mermerden yontulmaya başlanmış zarif bir siluet.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/heykel_taslagi.png',
-      setName: 'Usta Sanatçı'
-  ),
-  CollectionCard(
-      id: 'us_05',
-      name: 'Altın Çerçeve',
-      description: 'Tabloların değerini yüz katına çıkaran işlemeli çerçeve.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/altin_cerceve.png',
-      setName: 'Usta Sanatçı'
-  ),
-  CollectionCard(
-      id: 'us_06',
-      name: 'Usta Tablo',
-      description: 'Baktıkça insanı içine çeken, kütüphanenin en canlı resmi.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/usta_tablo.png',
-      setName: 'Usta Sanatçı'
-  ),
+  // SET 8: Usta Sanatçı (set_08)
+  const CollectionCard(id: 'us_01', name: 'Fırça', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/usta_sanatci/firca.webp', collectionId: 'set_08', setName: 'Usta Sanatçı', stars: 1),
+  const CollectionCard(id: 'us_02', name: 'Boya Paleti', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/usta_sanatci/boya_paleti.webp', collectionId: 'set_08', setName: 'Usta Sanatçı', stars: 1),
+  const CollectionCard(id: 'us_03', name: 'Şövale', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/usta_sanatci/sovale.webp', collectionId: 'set_08', setName: 'Usta Sanatçı', stars: 1),
+  const CollectionCard(id: 'us_04', name: 'Heykel Taslağı', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/usta_sanatci/heykel_taslagi.webp', collectionId: 'set_08', setName: 'Usta Sanatçı', stars: 2),
+  const CollectionCard(id: 'us_05', name: 'Altın Çerçeve', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/usta_sanatci/altin_cerceve.webp', collectionId: 'set_08', setName: 'Usta Sanatçı', stars: 2),
+  const CollectionCard(id: 'us_06', name: 'Usta Tablo', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/usta_sanatci/usta_tablo.webp', collectionId: 'set_08', setName: 'Usta Sanatçı', stars: 3),
 
-  // ==========================================
-  // SET 9: GENÇ MUCİT (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'gm_01',
-      name: 'Dişli',
-      description: 'Mekanik sistemlerin tıkır tıkır dönmesini sağlayan çark.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/disli.png',
-      setName: 'Genç Mucit'
-  ),
-  CollectionCard(
-      id: 'gm_02',
-      name: 'Vida Anahtarı',
-      description: 'Gevşeyen vidaları sıkan, mucidin en pratik el aleti.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/vida_anahtari.png',
-      setName: 'Genç Mucit'
-  ),
-  CollectionCard(
-      id: 'gm_03',
-      name: 'Bakır Boru',
-      description: 'Buhar gücünü ve enerjiyi ileten bükülmüş hatlar.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/bakir_boru.png',
-      setName: 'Genç Mucit'
-  ),
-  CollectionCard(
-      id: 'gm_04',
-      name: 'Çizim Defteri',
-      description: 'Henüz üretilmemiş robotların ve çılgın icatların şemaları.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/cizim_defteri.png',
-      setName: 'Genç Mucit'
-  ),
-  CollectionCard(
-      id: 'gm_05',
-      name: 'Mekanik Kuş',
-      description: 'Dişlilerle çalışan ve kütüphane tavanında uçabilen yapay kuş.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/mekanik_kus.png',
-      setName: 'Genç Mucit'
-  ),
-  CollectionCard(
-      id: 'gm_06',
-      name: 'Mini Robot',
-      description: 'Gözleri parlayan ve küçük tamiratları kendi yapan otonom dost.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/mini_robot.png',
-      setName: 'Genç Mucit'
-  ),
+  // SET 9: Genç Mucit (set_09)
+  const CollectionCard(id: 'gm_01', name: 'Dişli', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/genc_mucit/disli.webp', collectionId: 'set_09', setName: 'Genç Mucit', stars: 1),
+  const CollectionCard(id: 'gm_02', name: 'Vida Anahtarı', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/genc_mucit/vida_anahtari.webp', collectionId: 'set_09', setName: 'Genç Mucit', stars: 1),
+  const CollectionCard(id: 'gm_03', name: 'Bakır Boru', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/genc_mucit/bakir_boru.webp', collectionId: 'set_09', setName: 'Genç Mucit', stars: 1),
+  const CollectionCard(id: 'gm_04', name: 'Çizim Defteri', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/genc_mucit/cizim_defteri.webp', collectionId: 'set_09', setName: 'Genç Mucit', stars: 2),
+  const CollectionCard(id: 'gm_05', name: 'Mekanik Kuş', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/genc_mucit/mekanik_kus.webp', collectionId: 'set_09', setName: 'Genç Mucit', stars: 2),
+  const CollectionCard(id: 'gm_06', name: 'Mini Robot', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/genc_mucit/mini_robot.webp', collectionId: 'set_09', setName: 'Genç Mucit', stars: 3),
 
-  // ==========================================
-  // SET 10: KRALİYET HAZİNESİ (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'kh_01',
-      name: 'Kraliyet Mührü',
-      description: 'Geri alınamaz mutlak kararların mum üzerine basılan nişanı.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/kraliyet_muhru.png',
-      setName: 'Kraliyet Hazinesi'
-  ),
-  CollectionCard(
-      id: 'kh_02',
-      name: 'Kristal Kadeh',
-      description: 'Sarayı süsleyen, ışığı gökkuşağı renklerine bölen kadeh.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/kristal_kadeh.png',
-      setName: 'Kraliyet Hazinesi'
-  ),
-  CollectionCard(
-      id: 'kh_03',
-      name: 'Mücevher Kutusu',
-      description: 'İçi yakut ve zümrüt kolyelerle parıldayan kadife kutu.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/mucevher_kutusu.png',
-      setName: 'Kraliyet Hazinesi'
-  ),
-  CollectionCard(
-      id: 'kh_04',
-      name: 'Taht Minyatürü',
-      description: 'Altından yapılmış, gücü simgeleyen ince işçilikli bir maket.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/taht_minyaturu.png',
-      setName: 'Kraliyet Hazinesi'
-  ),
-  CollectionCard(
-      id: 'kh_05',
-      name: 'Altın Asa',
-      description: 'Görkemli taşlarla bezeli, hükümdarın kudret simgesi.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/altin_asa.png',
-      setName: 'Kraliyet Hazinesi'
-  ),
-  CollectionCard(
-      id: 'kh_06',
-      name: 'Kraliyet Tacı',
-      description: 'Saf altından, üzerinde en nadide elmasların parladığı başlık.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/kraliyet_taci.png',
-      setName: 'Kraliyet Hazinesi'
-  ),
+  // SET 10: Kraliyet Hazinesi (set_10)
+  const CollectionCard(id: 'kh_01', name: 'Kraliyet Mührü', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/kraliyet_hazinesi/kraliyet_muhru.webp', collectionId: 'set_10', setName: 'Kraliyet Hazinesi', stars: 1),
+  const CollectionCard(id: 'kh_02', name: 'Kristal Kadeh', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/kraliyet_hazinesi/kristal_kadeh.webp', collectionId: 'set_10', setName: 'Kraliyet Hazinesi', stars: 1),
+  const CollectionCard(id: 'kh_03', name: 'Mücevher Kutusu', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/kraliyet_hazinesi/mucevher_kutusu.webp', collectionId: 'set_10', setName: 'Kraliyet Hazinesi', stars: 1),
+  const CollectionCard(id: 'kh_04', name: 'Taht Minyatürü', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/kraliyet_hazinesi/taht_minyaturu.webp', collectionId: 'set_10', setName: 'Kraliyet Hazinesi', stars: 2),
+  const CollectionCard(id: 'kh_05', name: 'Altın Asa', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/kraliyet_hazinesi/altin_asa.webp', collectionId: 'set_10', setName: 'Kraliyet Hazinesi', stars: 2),
+  const CollectionCard(id: 'kh_06', name: 'Kraliyet Tacı', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/kraliyet_hazinesi/kraliyet_taci.webp', collectionId: 'set_10', setName: 'Kraliyet Hazinesi', stars: 3),
 
-  // ==========================================
-  // SET 11: GİZEMLİ ESERLER (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'ge_01',
-      name: 'Kara Anahtar',
-      description: 'Hangi kapıyı açtığı bilinmeyen, soğuk metalden anahtar.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/kara_anahtar.png',
-      setName: 'Gizemli Eserler'
-  ),
-  CollectionCard(
-      id: 'ge_02',
-      name: 'Mühürlü Parşömen',
-      description: 'Büyülü bir bağla kilitlenmiş, açılması tehlikeli rulo.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/muhurlu_parsemen.png',
-      setName: 'Gizemli Eserler'
-  ),
-  CollectionCard(
-      id: 'ge_03',
-      name: 'Gizemli Maske',
-      description: 'Takana kütüphanedeki gizli geçitleri gösteren antik maske.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/gizemli_maske.png',
-      setName: 'Gizemli Eserler'
-  ),
-  CollectionCard(
-      id: 'ge_04',
-      name: 'Kristal Küre',
-      description: 'İçinde sürekli sis bulutlarının döndüğü kehanet küresi.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/kristal_kure.png',
-      setName: 'Gizemli Eserler'
-  ),
-  CollectionCard(
-      id: 'ge_05',
-      name: 'Kara Kitap',
-      description: 'Sayfaları simsiyahtır, sadece ay ışığında gerçek yazılar belirir.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/kara_kitap.png',
-      setName: 'Gizemli Eserler'
-  ),
-  CollectionCard(
-      id: 'ge_06',
-      name: 'Antik Relik',
-      description: 'Kendi etrafında yavaşça dönen, havada asılı enerji kaynağı.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/antik_relik.png',
-      setName: 'Gizemli Eserler'
-  ),
+  // SET 11: Gizemli Eserler (set_11)
+  const CollectionCard(id: 'ge_01', name: 'Kara Anahtar', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/gizemli_eserler/kara_anahtar.webp', collectionId: 'set_11', setName: 'Gizemli Eserler', stars: 1),
+  const CollectionCard(id: 'ge_02', name: 'Mühürlü Parşömen', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/gizemli_eserler/muhurlu_parsemen.webp', collectionId: 'set_11', setName: 'Gizemli Eserler', stars: 1),
+  const CollectionCard(id: 'ge_03', name: 'Gizemli Maske', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/gizemli_eserler/gizemli_maske.webp', collectionId: 'set_11', setName: 'Gizemli Eserler', stars: 1),
+  const CollectionCard(id: 'ge_04', name: 'Kristal Küre', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/gizemli_eserler/kristal_kure.webp', collectionId: 'set_11', setName: 'Gizemli Eserler', stars: 2),
+  const CollectionCard(id: 'ge_05', name: 'Kara Kitap', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/gizemli_eserler/kara_kitap.webp', collectionId: 'set_11', setName: 'Gizemli Eserler', stars: 2),
+  const CollectionCard(id: 'ge_06', name: 'Antik Relik', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/gizemli_eserler/antik_relik.webp', collectionId: 'set_11', setName: 'Gizemli Eserler', stars: 3),
 
-  // ==========================================
-  // SET 12: SONSUZ BİLGELİK (6 Kart)
-  // ==========================================
-  CollectionCard(
-      id: 'sb_01',
-      name: 'Altın Yaprak',
-      description: 'Hayat ağacından düşmüş, kurumayan efsanevi yaprak.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/altin_yaprak.png',
-      setName: 'Sonsuz Bilgelik'
-  ),
-  CollectionCard(
-      id: 'sb_02',
-      name: 'Hafıza Kristali',
-      description: 'Geçmiş uygarlıkların tüm anılarını içinde depolayan taş.',
-      stars: 1,
-      imagePath: 'lib/assets/cards/hafiza_kristali.png',
-      setName: 'Sonsuz Bilgelik'
-  ),
-  CollectionCard(
-      id: 'sb_03',
-      name: 'Bilgi Çekirdeği',
-      description: 'Zihne yerleştirildiğinde dilleri anında çözebilen parça.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/bilgi_cekirdegi.png',
-      setName: 'Sonsuz Bilgelik'
-  ),
-  CollectionCard(
-      id: 'sb_04',
-      name: 'Bilgelik Küresi',
-      description: 'Evrenin tüm matematiksel düzenini içinde saklayan küre.',
-      stars: 2,
-      imagePath: 'lib/assets/cards/bilgelik_kuresi.png',
-      setName: 'Sonsuz Bilgelik'
-  ),
-  CollectionCard(
-      id: 'sb_05',
-      name: 'Kozmik Harita',
-      description: 'Yıldızların ve boyutlar arası geçiş kapılarının canlı haritası.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/kozmik_harita.png',
-      setName: 'Sonsuz Bilgelik'
-  ),
-  CollectionCard(
-      id: 'sb_06',
-      name: 'Sonsuz Kitap',
-      description: 'Sayfaları hiç bitmeyen, okudukça derinleşen nihai kaynak.',
-      stars: 3,
-      imagePath: 'lib/assets/cards/sonsuz_kitap.png',
-      setName: 'Sonsuz Bilgelik'
-  ),
+  // SET 12: Sonsuz Bilgelik (set_12)
+  const CollectionCard(id: 'sb_01', name: 'Altın Yaprak', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/sonsuz_bilgelik/altin_yaprak.webp', collectionId: 'set_12', setName: 'Sonsuz Bilgelik', stars: 1),
+  const CollectionCard(id: 'sb_02', name: 'Hafıza Kristali', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/sonsuz_bilgelik/hafiza_kristali.webp', collectionId: 'set_12', setName: 'Sonsuz Bilgelik', stars: 1),
+  const CollectionCard(id: 'sb_03', name: 'Bilgi Çekirdeği', description: '...', rarity: CardRarity.common, imagePath: 'lib/assets/cards/sonsuz_bilgelik/bilgi_cekirdegi.webp', collectionId: 'set_12', setName: 'Sonsuz Bilgelik', stars: 1),
+  const CollectionCard(id: 'sb_04', name: 'Bilgelik Küresi', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/sonsuz_bilgelik/bilgelik_kuresi.webp', collectionId: 'set_12', setName: 'Sonsuz Bilgelik', stars: 2),
+  const CollectionCard(id: 'sb_05', name: 'Kozmik Harita', description: '...', rarity: CardRarity.rare, imagePath: 'lib/assets/cards/sonsuz_bilgelik/kozmik_harita.webp', collectionId: 'set_12', setName: 'Sonsuz Bilgelik', stars: 2),
+  const CollectionCard(id: 'sb_06', name: 'Sonsuz Kitap', description: '...', rarity: CardRarity.legendary, imagePath: 'lib/assets/cards/sonsuz_bilgelik/sonsuz_kitap.webp', collectionId: 'set_12', setName: 'Sonsuz Bilgelik', stars: 3),
 ];

@@ -7,6 +7,9 @@ import '../../game/providers/game_provider.dart';
 import '../provider/library_provider.dart';
 import '../widgets/room_stage_reveal.dart';
 import '../../../data/library_rooms.dart';
+import 'room_completion_celebration_screen.dart';
+
+import '../provider/library_navigation_provider.dart';
 
 class RoomDetailScreen extends ConsumerStatefulWidget {
   final String roomId;
@@ -21,21 +24,23 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
   bool isUpgrading = false;
   String upgradeStatusText = "";
   int? _revealFromStage;
+  int? _targetStageIndex;
 
   late final AnimationController _revealController;
 
-  // UI animasyonu için kullanılan aksiyon metinleri
   @override
   void initState() {
     super.initState();
+    debugPrint('ROOM_DETAIL: initState for ${widget.roomId}');
     _revealController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 750),
     );
   }
 
   @override
   void dispose() {
+    debugPrint('ROOM_DETAIL: dispose for ${widget.roomId}');
     _revealController.dispose();
     super.dispose();
   }
@@ -43,49 +48,79 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
   Future<void> _handleUpgrade(int currentStage) async {
     if (isUpgrading) return;
 
-    final cost = ref.read(libraryProvider.notifier).getUpgradeCost(widget.roomId, currentStage);
+    final libraryNotifier = ref.read(libraryProvider.notifier);
+    final cost = libraryNotifier.getUpgradeCost(widget.roomId, currentStage);
     final gameState = ref.read(gameProvider);
 
     if (gameState.tokens < cost) return;
 
-    // 1. DATA DOSYASINDAN ODA VERİSİNİ VE ADIM İSİMLERİNİ ALIYORUZ
+    // 1. Prepare Target Data
+    final int targetStage = currentStage + 1;
     final roomData = libraryRooms.firstWhere((r) => r['id'] == widget.roomId);
     final List<String> stageTitles = List<String>.from(roomData['stageTitles']);
-
-    // 2. SABİT LİSTE YERİNE DATA DOSYASINDAKİ İSMİ KONTROL EDİYORUZ
-    final actionText = currentStage < stageTitles.length
+    final String nextStepTitle = currentStage < stageTitles.length
         ? stageTitles[currentStage]
         : "Geliştiriliyor";
 
+    // 2. Precache Next Stage Image
+    final String prefix = widget.roomId == 'room_03' ? 'room_state' : 'room_stage';
+    final String nextAssetPath = 'lib/assets/library/${widget.roomId}/${prefix}_$targetStage.webp';
+    
     setState(() {
       isUpgrading = true;
-      upgradeStatusText = "$actionText...".toUpperCase();
+      _targetStageIndex = targetStage;
+      upgradeStatusText = "$nextStepTitle...".toUpperCase();
     });
 
-    HapticFeedback.mediumImpact();
-    await Future.delayed(700.ms);
+    try {
+      await precacheImage(AssetImage(nextAssetPath), context);
+    } catch (e) {
+      debugPrint('Failed to precache room image: $e');
+      // Continue anyway, it will just load on the fly
+    }
+
     if (!mounted) return;
 
-    final int fromStage = currentStage;
+    // 3. Start Presentation Sequence
+    HapticFeedback.mediumImpact();
+    
+    // Initial delay for status text to be readable
+    await Future.delayed(500.ms);
+    if (!mounted) return;
 
     setState(() {
-      _revealFromStage = fromStage;
+      _revealFromStage = currentStage;
       upgradeStatusText = "TAMAMLANDI!";
     });
 
     HapticFeedback.lightImpact();
 
-    // 3. ANİMASYONU BAŞLATIYORUZ (Görsel efektler ekranda oynatılıyor)
+    // 4. Play Animation
+    // We update the persistent state ONLY after the animation has made visual contact
+    // to keep the RoomStageReveal logic simple.
+    
+    // We'll listen to the controller to commit the state at the right moment (Contact Point)
+    void onAnimationUpdate() {
+      if (_revealController.value >= 0.65 && isUpgrading && _revealFromStage != null) {
+        _revealController.removeListener(onAnimationUpdate);
+        // COMMIT STATE: This will update currentStageIndex in build()
+        libraryNotifier.upgradeRoom(widget.roomId);
+      }
+    }
+    _revealController.addListener(onAnimationUpdate);
+
     await _revealController.forward(from: 0);
+    
     if (!mounted) return;
 
-    // 4. ANİMASYON BİTTİKTEN SONRA STATE'İ GÜNCELLİYORUZ VE PARAYI DÜŞÜYORUZ
-    // Böylece alt paneldeki yazılar ve maliyetler animasyon sırasında erkenden zıplamıyor.
-    ref.read(libraryProvider.notifier).upgradeRoom(widget.roomId);
+    // Final cooldown
+    await Future.delayed(300.ms);
+    if (!mounted) return;
 
     setState(() {
       isUpgrading = false;
       _revealFromStage = null;
+      _targetStageIndex = null;
       upgradeStatusText = "";
     });
     _revealController.reset();
@@ -93,6 +128,46 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(libraryProvider.select((s) => s.pendingCelebration), (prev, next) async {
+      debugPrint('ROOM_DETAIL: pendingCelebration listener. Prev: ${prev != null}, Next: ${next != null}');
+      if (next != null && prev == null) {
+        final navigator = Navigator.of(context);
+        await Future.delayed(800.ms);
+        if (!mounted) return;
+
+        debugPrint('ROOM_DETAIL: pushing RoomCompletionCelebrationScreen');
+        final bool? shouldFocusNext = await navigator.push<bool>(
+          MaterialPageRoute(
+            builder: (context) => RoomCompletionCelebrationScreen(result: next),
+            settings: const RouteSettings(name: 'Celebration'),
+          ),
+        );
+
+        debugPrint('ROOM_DETAIL: Celebration returned, shouldFocusNext: $shouldFocusNext');
+        if (mounted) {
+          debugPrint('ROOM_DETAIL: popping RoomDetailScreen');
+          navigator.pop();
+
+          if (shouldFocusNext == true) {
+            final nextRoom = libraryRooms.firstWhere(
+              (r) => r['unlockRequirement'] == widget.roomId,
+              orElse: () => {},
+            );
+            
+            if (nextRoom.isNotEmpty) {
+              final nextId = nextRoom['id'] as String;
+              debugPrint('ROOM_DETAIL: focusing next room: $nextId');
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  ref.read(libraryProvider.notifier).focusUnlockedRoom(nextId);
+                }
+              });
+            }
+          }
+        }
+      }
+    });
+
     final libraryState = ref.watch(libraryProvider);
     final libraryNotifier = ref.read(libraryProvider.notifier);
     final gameState = ref.watch(gameProvider);
@@ -110,22 +185,27 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
       canAfford = gameState.tokens >= nextUpgradeCost;
     }
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          // Request focus when returning to library list
+          ref.read(libraryFocusRequestProvider.notifier).state = true;
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
         children: [
-          // 1. TAM EKRAN ODA — önceki stage sabit, yeni öğe üzerine yerleşir
           Positioned.fill(
             child: RoomStageReveal(
               roomId: widget.roomId,
               stageIndex: currentStageIndex,
+              targetStageIndex: _targetStageIndex,
               revealFromStage: _revealFromStage,
               revealAnimation: _revealController,
-              showSparkles: _revealFromStage != null,
             ),
           ),
 
-          // 2. OKUNABİLİRLİK GRADIENTI
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -133,10 +213,10 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.4),
+                    Colors.black.withValues(alpha:0.4),
                     Colors.transparent,
                     Colors.transparent,
-                    Colors.black.withOpacity(0.8),
+                    Colors.black.withValues(alpha:0.8),
                   ],
                   stops: const [0.0, 0.2, 0.7, 1.0],
                 ),
@@ -144,7 +224,6 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
             ),
           ),
 
-          // 3. ÜST PANEL
           Column(
             children: [
               _buildCompactHeader(roomData['name'] as String),
@@ -156,7 +235,6 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
             ],
           ),
 
-          // 4. DOKUNULMAZ: ALT UPGRADE PANELİ
           Positioned(
             left: 0,
             right: 0,
@@ -172,11 +250,11 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
             ),
           ),
 
-          // 5. UPGRADE EFEKTLERİ
           if (isUpgrading) _buildGlowOverlay(),
           if (isUpgrading) Center(child: _buildStatusPopup()),
         ],
       ),
+    ),
     );
   }
 
@@ -217,11 +295,9 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
   }
 
   Widget _buildUpgradePanel(int currentStage, bool canAfford, int cost) {
-    // 1. DATA DOSYASINDAN BU ODANIN VERİLERİNİ VE ADIM İSİMLERİNİ ALIYORUZ
     final roomData = libraryRooms.firstWhere((r) => r['id'] == widget.roomId);
     final List<String> stageTitles = List<String>.from(roomData['stageTitles']);
 
-    // 2. ESKİ LİSTE YERİNE DATA DOSYASINDAKİ LİSTEYE GÖRE KONTROL EDİYORUZ
     String nextStepTitle = (currentStage < stageTitles.length)
         ? stageTitles[currentStage]
         : "SON DOKUNUŞLAR";
@@ -229,7 +305,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1C).withOpacity(0.9),
+        color: const Color(0xFF1A1A1C).withValues(alpha:0.9),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white10),
         boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20, offset: const Offset(0, 10))],
@@ -318,7 +394,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
     child: Container(
       decoration: BoxDecoration(
         gradient: RadialGradient(
-          colors: [const Color(0xFFCEA14F).withOpacity(0.3), Colors.transparent],
+          colors: [const Color(0xFFCEA14F).withValues(alpha:0.3), Colors.transparent],
         ),
       ),
     ).animate().fadeIn().fadeOut(delay: 700.ms),
@@ -328,13 +404,13 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1C).withOpacity(0.9),
+        color: const Color(0xFF1A1A1C).withValues(alpha:0.9),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFD4A574).withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFD4A574).withValues(alpha:0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.emoji_events, color: Color(0xFFF2C078), size: 32).animate(onPlay: (c) => c.repeat()).shimmer(),
+          _buildEmojiEventsIcon(),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -348,5 +424,13 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildEmojiEventsIcon() {
+    final icon = const Icon(Icons.emoji_events, color: Color(0xFFF2C078), size: 32);
+    if (ref.read(gameProvider).showVictoryPanel) return icon; // Don't animate if overlay active
+
+    final animatedIcon = icon.animate(onPlay: (c) => c.repeat());
+    return animatedIcon.shimmer();
   }
 }

@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_dimens.dart';
+import '../../../core/debug_config.dart';
 import '../../game/providers/game_provider.dart';
 import '../../library/provider/library_provider.dart';
+import '../../tutorial/providers/tutorial_provider.dart';
 import '../providers/navigation_provider.dart';
 
 class LexBottomNav extends ConsumerWidget {
@@ -19,10 +21,48 @@ class LexBottomNav extends ConsumerWidget {
     // 1. GEREKLİ VERİLERİ ÇEK
     final gameState = ref.watch(gameProvider);
     final libraryNotifier = ref.read(libraryProvider.notifier);
+    final tutorial = ref.watch(tutorialProvider);
 
     // 2. BİLDİRİM NOKTASI MANTIĞI: Para yetiyor mu kontrol et
-    // Not: Bu metodun library_provider içinde tanımlı olduğundan emin ol
     final bool showBadge = libraryNotifier.canAffordAnyUpgrade(gameState.tokens);
+
+    final Widget navContent = Container(
+      height: 70,
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: DebugConfig.enableBackdropBlurs ? 0.8 : 0.95),
+        borderRadius: BorderRadius.circular(AppDimens.radiusXL),
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildNavItem(ref, 0, Icons.grid_view_rounded, currentIndex == 0, isLocked: tutorial.isNavigationLocked, key: const ValueKey('nav_game')),
+
+          _buildNavItem(
+            ref,
+            1,
+            Icons.menu_book_rounded,
+            currentIndex == 1,
+            showBadge: showBadge,
+            isLocked: tutorial.isNavigationLocked,
+            key: const ValueKey('nav_library'),
+          ),
+
+          _buildNavItem(ref, 2, Icons.shopping_bag_rounded, currentIndex == 2, isLocked: tutorial.isNavigationLocked, key: const ValueKey('nav_store')),
+          _buildNavItem(ref, 3, Icons.settings_rounded, currentIndex == 3, isLocked: tutorial.isNavigationLocked, key: const ValueKey('nav_settings')),
+        ],
+      ),
+    );
 
     return Padding(
       padding: EdgeInsets.only(
@@ -32,47 +72,19 @@ class LexBottomNav extends ConsumerWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppDimens.radiusXL),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            height: 70,
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(AppDimens.radiusXL),
-              border: Border.all(
-                color: AppColors.border.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                )
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildNavItem(ref, 0, Icons.grid_view_rounded, currentIndex == 0),
-
-                // 3. KÜTÜPHANE İKONU (Badge desteği eklendi)
-                _buildNavItem(
-                  ref,
-                  1,
-                  Icons.menu_book_rounded,
-                  currentIndex == 1,
-                  showBadge: showBadge, // Badge durumunu buraya bağladık
-                ),
-
-                _buildNavItem(ref, 2, Icons.shopping_bag_rounded, currentIndex == 2),
-                _buildNavItem(ref, 3, Icons.settings_rounded, currentIndex == 3),
-              ],
-            ),
-          ),
-        ),
+        child: DebugConfig.enableBackdropBlurs
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: navContent,
+              )
+            : navContent,
       ),
-    ).animate().slideY(begin: 1, end: 0, duration: 600.ms, curve: Curves.easeOutQuart);
+    ).animate().slideY(
+      begin: 1, 
+      end: 0, 
+      duration: 600.ms, 
+      curve: Curves.easeOutQuart,
+    );
   }
 
   Widget _buildNavItem(
@@ -80,10 +92,13 @@ class LexBottomNav extends ConsumerWidget {
       int index,
       IconData icon,
       bool isActive, {
-        bool showBadge = false, // Bildirim noktası için yeni parametre
+        bool showBadge = false,
+        bool isLocked = false,
+        Key? key,
       }) {
     return GestureDetector(
-      onTap: () => ref.read(navigationProvider.notifier).state = index,
+      key: key,
+      onTap: isLocked ? null : () => ref.read(navigationProvider.notifier).state = index,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
         width: 60,
@@ -94,7 +109,6 @@ class LexBottomNav extends ConsumerWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                // Ana İkon
                 Icon(
                   icon,
                   color: isActive ? AppColors.primary : AppColors.textMuted,
@@ -105,7 +119,6 @@ class LexBottomNav extends ConsumerWidget {
                   duration: 200.ms,
                 ),
 
-                // BİLDİRİM İŞARETİ (Altın Parlayan Nokta)
                 if (showBadge)
                   Positioned(
                     top: -2,
@@ -114,10 +127,10 @@ class LexBottomNav extends ConsumerWidget {
                       width: 10,
                       height: 10,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF2C078), // Parlak Altın
+                        color: const Color(0xFFF2C078),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.surface, // NavBar yüzeyi ile kontrast
+                          color: AppColors.surface,
                           width: 1.5,
                         ),
                         boxShadow: [
@@ -128,10 +141,7 @@ class LexBottomNav extends ConsumerWidget {
                           )
                         ],
                       ),
-                    )
-                    // Oyuncunun dikkatini çeken hafif büyüme/küçülme efekti
-                        .animate(onPlay: (c) => c.repeat(reverse: true))
-                        .scale(
+                    ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
                       begin: const Offset(0.8, 0.8),
                       end: const Offset(1.2, 1.2),
                       duration: 800.ms,
@@ -141,7 +151,6 @@ class LexBottomNav extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
 
-            // Aktif Tab Altındaki Küçük Altın Nokta
             AnimatedContainer(
               duration: 300.ms,
               width: isActive ? 4 : 0,

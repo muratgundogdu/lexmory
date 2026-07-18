@@ -7,22 +7,113 @@ import '../../library/screens/library_overview_screen.dart';
 import '../../store/view/store_screen.dart';
 import '../../settings/view/settings_screen.dart';
 import '../../tutorial/models/tutorial_state.dart' hide TutorialKeys;
-import '../../tutorial/models/tutorial_keys.dart'; // Merkezi Key dosyası eklendi
+import '../../tutorial/models/tutorial_keys.dart'; 
 import '../providers/navigation_provider.dart';
 import '../widgets/lex_bottom_nav.dart';
+import '../../library/widgets/chest_reward_overlay.dart';
+import '../../library/provider/reward_queue_provider.dart';
 import '../../tutorial/providers/tutorial_provider.dart';
 import '../../tutorial/widgets/tutorial_overlay.dart';
 import '../../tutorial/widgets/tutorial_phase2_intro.dart';
 import '../../tutorial/widgets/tutorial_success_overlay.dart';
+import '../../daily_login/providers/daily_login_provider.dart';
+import '../../daily_login/widgets/daily_login_dialog.dart';
 
-class MainNavigationScreen extends ConsumerWidget {
+class MainNavigationScreen extends ConsumerStatefulWidget {
   const MainNavigationScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MainNavigationScreen> createState() => _MainNavigationScreenState();
+}
+
+class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
+  bool _dailyLoginChecked = false;
+  bool _isOverlayActive = false;
+
+  void _checkAndShowNextReward() {
+    if (!mounted || _isOverlayActive) return;
+
+    final rewardQueue = ref.read(rewardQueueProvider);
+    final tutorial = ref.read(tutorialProvider);
+
+    if (rewardQueue.events.isNotEmpty && !rewardQueue.isPresenting && !tutorial.isNavigationLocked) {
+      final event = rewardQueue.events.first;
+      
+      // Mark as presenting immediately to avoid duplicate triggers
+      ref.read(rewardQueueProvider.notifier).markPresentationStarted();
+      
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        
+        setState(() => _isOverlayActive = true);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => ChestRewardOverlay(
+            result: event.result,
+            title: event.title,
+            subtitle: event.subtitle,
+          ),
+        ).then((_) {
+          if (mounted) {
+            setState(() => _isOverlayActive = false);
+            ref.read(rewardQueueProvider.notifier).completeCurrent();
+            // Re-check for more rewards in the queue
+            _checkAndShowNextReward();
+          }
+        });
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentIndex = ref.watch(navigationProvider);
     final tutorial = ref.watch(tutorialProvider);
     final game = ref.watch(gameProvider);
+    final dailyLogin = ref.watch(dailyLoginProvider);
+    final rewardQueue = ref.watch(rewardQueueProvider);
+
+    // Mandatory Tab Enforcement
+    if (tutorial.isNavigationLocked && 
+        tutorial.requiredTabIndex != null && 
+        currentIndex != tutorial.requiredTabIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(navigationProvider.notifier).state = tutorial.requiredTabIndex!;
+      });
+    }
+
+    // Reward Presentation Listener
+    ref.listen(rewardQueueProvider, (previous, next) {
+      _checkAndShowNextReward();
+    });
+
+    // Daily Login Auto-Show
+    if (!_dailyLoginChecked && 
+        !dailyLogin.isLoading && 
+        dailyLogin.isRewardAvailable && 
+        tutorial.onboardingFullyCompleted && // Requirement
+        !tutorial.isTutorialActive && 
+        !tutorial.isNavigationLocked && // Extra safety
+        !_isOverlayActive && 
+        rewardQueue.events.isEmpty) {
+      _dailyLoginChecked = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _isOverlayActive = true);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const DailyLoginDialog(),
+        ).then((_) {
+          if (mounted) {
+            setState(() => _isOverlayActive = false);
+            // Trigger check after Daily Login dialog closes
+            _checkAndShowNextReward();
+          }
+        });
+      });
+    }
 
     final List<Widget> screens = [
       const GameScreen(),
@@ -31,21 +122,72 @@ class MainNavigationScreen extends ConsumerWidget {
       const SettingsScreen(),
     ];
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          IndexedStack(index: currentIndex, children: screens),
+    return PopScope(
+      canPop: !tutorial.isNavigationLocked,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && tutorial.isNavigationLocked) {
+          // Navigation is locked due to tutorial
+        }
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            IndexedStack(index: currentIndex, children: screens),
 
-          // Alt Navigasyon Bar
-          const Align(
-            alignment: Alignment.bottomCenter,
-            child: LexBottomNav(),
-          ),
+            // Gift Icon if reward is available but dialog closed
+            if (dailyLogin.isRewardAvailable && 
+                tutorial.onboardingFullyCompleted && 
+                !tutorial.isTutorialActive && 
+                !tutorial.isNavigationLocked)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 60,
+                right: 20,
+                child: GestureDetector(
+                  onTap: _isOverlayActive ? null : () {
+                    setState(() => _isOverlayActive = true);
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const DailyLoginDialog(),
+                    ).then((_) {
+                      if (mounted) setState(() => _isOverlayActive = false);
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2C078),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: Colors.black45, blurRadius: 8),
+                      ],
+                    ),
+                    child: const Icon(Icons.card_giftcard_rounded, color: Colors.black, size: 24),
+                  ),
+                ),
+              ),
 
-          // --- TUTORIAL OVERLAY (EN ÜST KATMAN) ---
-          if (tutorial.isTutorialActive)
-            _buildGlobalTutorialStep(ref, tutorial, game),
-        ],
+            // Alt Navigasyon Bar
+            const Align(
+              alignment: Alignment.bottomCenter,
+              child: LexBottomNav(),
+            ),
+
+            // Interactivity Lock Barrier (Gap protection)
+            if (tutorial.isNavigationLocked && !tutorial.isTutorialActive)
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () {}, // Block taps
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+
+            // --- TUTORIAL OVERLAY (EN ÜST KATMAN) ---
+            if (tutorial.isTutorialActive)
+              _buildGlobalTutorialStep(ref, tutorial, game),
+          ],
+        ),
       ),
     );
   }
@@ -65,13 +207,12 @@ class MainNavigationScreen extends ConsumerWidget {
         );
 
       case TutorialStep.wordBoxes:
-      // Eğer harf seçiminden sonra buraya kaydıysak (handleLetterSuccessFlow çalıştıysa)
         String flowText = "Bulman gereken kelime burada yer alır.";
         bool showBtn = true;
 
         if (tutorialState.phase == TutorialPhase.phase1 && game.hasStarted) {
           flowText = "Harika! ✨\nHarf ait olduğu yere yerleşti. Devam edelim...";
-          showBtn = false; // Harf yerleştiğinde buton gösterme, otomatik geçecek
+          showBtn = false; 
         }
 
         return TutorialOverlay(
@@ -103,19 +244,17 @@ class MainNavigationScreen extends ConsumerWidget {
         );
 
       case TutorialStep.findingLetters:
-      // Eğer Phase 2'deysek (Sıra Sende) overlay gösterme
         if (tutorialState.phase == TutorialPhase.phase2) return const SizedBox.shrink();
 
         final int nextIdx = game.foundLetters.indexOf(null);
 
-        // --- KRİTİK DÜZELTME: Eğer bulunacak harf kalmadıysa (Son harf seçildiyse) ---
         if (nextIdx == -1) {
           return TutorialOverlay(
-            targetKey: TutorialKeys.wordAreaKey, // Odak kelime alanına kayar
+            targetKey: TutorialKeys.wordAreaKey, 
             currentStep: step,
             isInitialPhase: true,
             text: "Muhteşem! ✨\nKelimenin tüm parçalarını birleştirdin.",
-            showButton: false, // 1.5 sn sonra zaten otomatik 'success' adımına geçecek
+            showButton: false, 
             onNext: () {},
           );
         }
@@ -125,14 +264,12 @@ class MainNavigationScreen extends ConsumerWidget {
 
         final char = game.targetWord[nextIdx];
 
-        // Dinamik Mesajlar
         if (char == "L") {
           instructionText = "Hafızan çok güçlü! ✨\nŞimdi listeden **'L'** harfini bul ve dokun.";
         } else if (char == "A") {
           instructionText = "Mükemmel gidiyorsun! 🎯\nSon parça: **'A'** harfini de yerine koyalım.";
         }
 
-        // Grid içinden harf anahtarını bulma
         int gridIdx = -1;
         for (int i = 0; i < game.gridLetters.length; i++) {
           if (game.gridLetters[i] == char && !game.selectedIndices.contains(i)) {
@@ -150,7 +287,7 @@ class MainNavigationScreen extends ConsumerWidget {
           currentStep: step,
           isInitialPhase: true,
           text: instructionText,
-          showButton: false, // Kullanıcının harfe basmasını bekliyoruz
+          showButton: false, 
           onNext: () {},
         );
 
@@ -167,12 +304,11 @@ class MainNavigationScreen extends ConsumerWidget {
         return TutorialPhase2Intro(
           onStart: () {
             ref.read(gameProvider.notifier).resetGameForTutorial();
-            notifier.startPhase2Practice(); // step -> phase2Play yapar
+            notifier.startPhase2Practice(); 
           },
         );
 
       case TutorialStep.phase2Play:
-      // "Sıra sende" oynanış aşaması. Ekranda hiçbir overlay olmamalı.
         return const SizedBox.shrink();
 
       case TutorialStep.completed:
@@ -187,7 +323,6 @@ class MainNavigationScreen extends ConsumerWidget {
           },
         );
 
-    // --- JOKER TANITIMLARI ---
       case TutorialStep.forcedHint:
         return TutorialOverlay(
           targetKey: TutorialKeys.hintKey,
@@ -228,8 +363,6 @@ class MainNavigationScreen extends ConsumerWidget {
           onNext: () => notifier.closeTokenTutorial(),
         );
 
-      default:
-        return const SizedBox.shrink();
     }
   }
 }
